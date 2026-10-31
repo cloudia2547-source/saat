@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#061315">
+<title>s'aat Vision</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 26'%3E%3Crect x='1' y='1' width='32' height='24' rx='6' fill='%23061315' stroke='%233cc463' stroke-width='2'/%3E%3Ccircle cx='17' cy='13' r='5' fill='none' stroke='%237dffa0' stroke-width='2.6'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: full-screen camera stage (landscape first). HUD floats on top: nearest-trash card top-left, status top-right, controls along the bottom. Colours follow the s'aat site. */
+:root {
+  --bg: #061315;         /* s'aat site ground */
+  --panel: rgba(6, 19, 21, .82);
+  --panel-solid: #0b2124;
+  --line: #1d3d40;
+  --fg: #e6f4ee;
+  --muted: #8fb0a6;
+  --accent: #3cc463;     /* s'aat green */
+  --accent-hi: #7dffa0;
+  --trash: #ff4d42;      /* trash on the floor */
+  --off: #ffb020;        /* trash, not on the floor */
+  --f-ui: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-num: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg); font-family: var(--f-ui); -webkit-tap-highlight-color: transparent; }
+body { overflow: hidden; overscroll-behavior: none; }
+[hidden] { display: none !important; }
+
+.stage { position: fixed; inset: 0; background: #000; }
+.stage video, .stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+#overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+/* start screen */
+.intro {
+  position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+  padding: max(20px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(96px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  background: radial-gradient(ellipse at 50% 40%, #0d2a2c 0%, var(--bg) 70%);
+}
+.intro-inner { display: flex; flex-direction: column; gap: 14px; align-items: center; max-width: 34rem; }
+.intro h1 { margin: 0; font-size: clamp(26px, 6vw, 40px); font-weight: 700; letter-spacing: .01em; }
+.intro h1 span { color: var(--accent-hi); }
+.intro p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.5; text-wrap: balance; }
+.intro .tip { font-size: 13px; }
+
+/* HUD */
+.hud-top {
+  position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
+  padding: calc(env(safe-area-inset-top) + 10px) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
+  pointer-events: none;
+}
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.nearest { padding: 10px 14px; min-width: 0; max-width: 60%; }
+.nearest .k { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+.nearest .what { font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nearest .dist { font-family: var(--f-num); font-weight: 700; font-size: 34px; line-height: 1.05; color: var(--trash); font-variant-numeric: tabular-nums; }
+.nearest .dist.none { color: var(--muted); font-size: 20px; }
+.status { padding: 7px 11px; font-family: var(--f-num); font-size: 12px; color: var(--muted); text-align: right; line-height: 1.5; }
+.status b { color: var(--accent-hi); font-weight: 500; }
+.status.err { color: var(--trash); }
+
+.hud-bottom {
+  position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap;
+  padding: 0 max(12px, env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 12px) max(12px, env(safe-area-inset-left));
+}
+button {
+  font-family: var(--f-ui); font-size: 15px; font-weight: 600; color: var(--fg);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
+  padding: 11px 18px; min-height: 46px; cursor: pointer; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: #032010; }
+button.big { font-size: 18px; padding: 15px 30px; min-height: 56px; }
+button:disabled { opacity: .45; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
+@media (prefers-reduced-motion: no-preference) { button:active { transform: scale(.96); } }
+
+.turn {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 12px 16px; font-size: 14px; color: var(--fg); text-align: center;
+}
+
+/* settings sheet */
+.sheet {
+  position: fixed; top: 0; bottom: 0; right: 0; width: min(380px, 100%); overflow-y: auto; background: var(--panel-solid); border-left: 1px solid var(--line);
+  padding: calc(env(safe-area-inset-top) + 16px) max(18px, env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 24px) 18px;
+  display: flex; flex-direction: column; gap: 16px; z-index: 5;
+}
+.sheet header { display: flex; justify-content: space-between; align-items: center; }
+.sheet h2 { margin: 0; font-size: 19px; }
+.row { display: flex; flex-direction: column; gap: 6px; }
+.row label { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+.row output { font-family: var(--f-num); color: var(--accent-hi); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.row p, .sheet .note { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.switch { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
+.switch input { width: 22px; height: 22px; accent-color: var(--accent); }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.sheet h3 { margin: 6px 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips span { font-size: 12.5px; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); }
+.chips.trash span { border-color: rgba(255, 77, 66, .55); }
+</style>
+</head>
+<body>
+
+<div class="stage" id="stage">
+  <video id="vid" playsinline muted hidden></video>
+  <img id="pic" alt="" hidden>
+  <canvas id="overlay"></canvas>
+
+  <div class="intro" id="intro">
+    <div class="intro-inner">
+      <h1>s'aat <span>Vision</span></h1>
+      <p>Hold the phone sideways and point it at the floor. Trash gets a red box with how far the robot has to travel to reach it.</p>
+      <button class="primary big" id="btnStart" disabled>Loading model…</button>
+      <p class="tip">The first visit downloads about 22&nbsp;MB. Allow camera and motion when Safari asks.</p>
+    </div>
+  </div>
+
+  <div class="hud-top" id="hudTop" hidden>
+    <div class="card nearest" aria-live="polite">
+      <div class="k">Nearest trash</div>
+      <div class="what" id="nearWhat">Scanning…</div>
+      <div class="dist none" id="nearDist">–</div>
+    </div>
+    <div class="card status" id="status" role="status">Starting…</div>
+  </div>
+
+  <div class="card turn" id="turnHint" hidden>Turn the phone sideways<br><span style="color:var(--muted);font-size:12px">Rotation lock must be off</span></div>
+
+  <div class="hud-bottom" id="hudBottom">
+    <button id="btnLive">Live</button>
+    <button id="btnPhoto">Photo</button>
+    <button id="btnVideo">Video</button>
+    <button id="btnSettings">Settings</button>
+  </div>
+</div>
+
+<input type="file" id="photoIn" accept="image/*" hidden>
+<input type="file" id="videoIn" accept="video/*" hidden>
+
+<aside class="sheet" id="sheet" hidden aria-label="Settings">
+  <header><h2>Settings</h2><button id="btnClose">Done</button></header>
+
+  <div class="row">
+    <label for="sHeight">Phone height above floor <output id="oHeight"></output></label>
+    <input type="range" id="sHeight" min="5" max="180" step="1">
+    <p>Standing with the phone at chest height is about 120 cm. On the robot, measure floor to lens.</p>
+  </div>
+  <div class="row">
+    <label for="sOffset">Robot front offset <output id="oOffset"></output></label>
+    <input type="range" id="sOffset" min="0" max="60" step="1">
+    <p>Distance from the camera to the robot's scoop. Leave at 0 while holding the phone.</p>
+  </div>
+  <div class="switch">
+    <label for="sAuto">Measure tilt with the motion sensor</label>
+    <input type="checkbox" id="sAuto">
+  </div>
+  <div class="row">
+    <label for="sTilt">Tilt down (manual, and for photos/videos) <output id="oTilt"></output></label>
+    <input type="range" id="sTilt" min="5" max="85" step="1">
+  </div>
+  <div class="row">
+    <label for="sRange">Farthest floor distance <output id="oRange"></output></label>
+    <input type="range" id="sRange" min="1" max="10" step="0.5">
+    <p>Trash beyond this, or above the horizon, is marked "not on floor".</p>
+  </div>
+  <div class="row">
+    <label for="sConf">Minimum confidence <output id="oConf"></output></label>
+    <input type="range" id="sConf" min="10" max="80" step="1">
+    <p>Raise it if you see wrong boxes, lower it if real trash is missed.</p>
+  </div>
+  <div class="row">
+    <label for="sFov">Camera field of view <output id="oFov"></output></label>
+    <input type="range" id="sFov" min="40" max="110" step="1">
+    <p>About 64° for the iPhone main camera in landscape video.</p>
+  </div>
+
+  <h3>Counted as trash</h3>
+  <div class="chips trash" id="chipsTrash"></div>
+  <h3>Checked but never boxed</h3>
+  <div class="chips" id="chipsKeep"></div>
+  <p class="note">Distance is worked out from where the trash touches the floor, the phone height and its tilt. A bottle on a table can look like floor trash further away, because one camera cannot see depth.</p>
+</aside>
+
+<script>
+(() => {
+  // ---------------- config ----------------
+  const TRASH = ["plastic bottle","plastic cup","paper cup","can","snack wrapper","plastic bag","food scraps","cigarette butt","crumpled paper","straw"];
+  const KEEP  = ["shoe","cable","mobile phone","chair leg","person","bag","book","remote control","pet","trash bin","bollard","table","chair"];
+  const CLASSES = TRASH.concat(KEEP);       // must match the order baked into model.onnx
+  const S = 416;
+  const COL = { trash: "#ff4d42", off: "#ffb020" };
+
+  const $ = id => document.getElementById(id);
+  const vid = $("vid"), pic = $("pic"), overlay = $("overlay"), octx = overlay.getContext("2d");
+  const statusEl = $("status");
+
+  // ---------------- settings ----------------
+  const DEF = { height: 120, offset: 0, auto: true, tilt: 45, range: 5, conf: 25, fov: 64 };
+  let set = { ...DEF };
+  try { Object.assign(set, JSON.parse(localStorage.getItem("saat-vision") || "{}")); } catch (e) {}
+  const save = () => { try { localStorage.setItem("saat-vision", JSON.stringify(set)); } catch (e) {} };
+  const fmt = { height: v => v + " cm", offset: v => v + " cm", tilt: v => v + "°", range: v => v + " m", conf: v => v + "%", fov: v => v + "°" };
+  const ids = { height: "Height", offset: "Offset", tilt: "Tilt", range: "Range", conf: "Conf", fov: "Fov" };
+  for (const [k, n] of Object.entries(ids)) {
+    const s = $("s" + n), o = $("o" + n);
+    s.value = set[k]; o.textContent = fmt[k](set[k]);
+    s.addEventListener("input", () => { set[k] = +s.value; o.textContent = fmt[k](set[k]); save(); onSettingsChanged(k); });
+  }
+  $("sAuto").checked = set.auto;
+  $("sAuto").addEventListener("change", e => { set.auto = e.target.checked; save(); if (set.auto) enableMotion(); });
+  for (const t of TRASH) { const s = document.createElement("span"); s.textContent = t; $("chipsTrash").append(s); }
+  for (const t of KEEP)  { const s = document.createElement("span"); s.textContent = t; $("chipsKeep").append(s); }
+  $("btnSettings").onclick = () => { $("sheet").hidden = false; };
+  $("btnClose").onclick = () => { $("sheet").hidden = true; };
+
+  // ---------------- status ----------------
+  let statusMain = "", statusErr = false;
+  function setStatus(t, err) { statusMain = t; statusErr = !!err; renderStatus(); }
+  function renderStatus() {
+    statusEl.classList.toggle("err", statusErr);
+    const tiltTxt = tiltSource() === "sensor" ? `tilt <b>${Math.round(sensorTilt)}°</b>` : `tilt ${set.tilt}° (manual)`;
+    statusEl.innerHTML = "";
+    const a = document.createElement("div"); a.textContent = statusMain;
+    const b = document.createElement("div"); b.innerHTML = tiltTxt;
+    statusEl.append(a, b);
+  }
+
+  // ---------------- motion sensor tilt ----------------
+  // Camera axis is the device's -z. Its angle below horizontal = asin(cos(beta) * cos(gamma)), valid in any orientation.
+  let sensorTilt = null, lastSensor = 0, motionOn = false;
+  function onOrient(e) {
+    if (e.beta == null || e.gamma == null) return;
+    const b = e.beta * Math.PI / 180, g = e.gamma * Math.PI / 180;
+    const t = Math.asin(Math.max(-1, Math.min(1, Math.cos(b) * Math.cos(g)))) * 180 / Math.PI;
+    sensorTilt = sensorTilt == null ? t : sensorTilt * 0.8 + t * 0.2;
+    lastSensor = performance.now();
+  }
+  async function enableMotion() {
+    if (motionOn) return;
+    try {
+      if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+        const r = await DeviceOrientationEvent.requestPermission();
+        if (r !== "granted") return;
+      }
+      window.addEventListener("deviceorientation", onOrient);
+      motionOn = true;
+    } catch (e) { /* no sensor or refused: manual tilt is used */ }
+  }
+  function tiltSource() { return set.auto && mode === "live" && sensorTilt != null && performance.now() - lastSensor < 1500 ? "sensor" : "manual"; }
+  function currentTilt() { return tiltSource() === "sensor" ? sensorTilt : set.tilt; }
+
+  // ---------------- model worker ----------------
+  const worker = new Worker("worker.js");
+  let ready = false, busy = false, runId = 0;
+  worker.onmessage = e => {
+    const m = e.data;
+    if (m.type === "ready") {
+      ready = true;
+      const b = $("btnStart"); b.disabled = false; b.textContent = "Start live scan";
+      setStatus("Ready");
+    } else if (m.type === "error") {
+      $("btnStart").textContent = "Model failed to load";
+      setStatus("Model failed to load: " + m.message, true);
+      $("hudTop").hidden = false;
+    } else if (m.type === "result") onResult(m);
+  };
+  worker.postMessage({ type: "init", model: new URL("model.onnx", location.href).href });
+
+  // ---------------- preprocessing ----------------
+  const pc = document.createElement("canvas"); pc.width = pc.height = S;
+  const pctx = pc.getContext("2d", { willReadFrequently: true });
+  function preprocess(src, w, h) {
+    const r = Math.min(S / w, S / h), nw = Math.round(w * r), nh = Math.round(h * r);
+    const px = Math.floor((S - nw) / 2), py = Math.floor((S - nh) / 2);
+    pctx.fillStyle = "rgb(114,114,114)"; pctx.fillRect(0, 0, S, S);
+    pctx.drawImage(src, 0, 0, w, h, px, py, nw, nh);
+    const d = pctx.getImageData(0, 0, S, S).data, A = S * S, f = new Float32Array(3 * A);
+    for (let i = 0, j = 0; i < A; i++, j += 4) { f[i] = d[j] / 255; f[i + A] = d[j + 1] / 255; f[i + 2 * A] = d[j + 2] / 255; }
+    return { f, r, px, py };
+  }
+
+  // ---------------- distance (pinhole camera over a flat floor) ----------------
+  // (u, v) = pixel where the trash touches the floor. Returns the floor distance the robot must travel, in cm.
+  function travel(u, v, w, h, tiltDeg) {
+    const f = (Math.max(w, h) / 2) / Math.tan(set.fov / 2 * Math.PI / 180);
+    const x = u - w / 2, y = v - h / 2, th = tiltDeg * Math.PI / 180;
+    const down = f * Math.sin(th) + y * Math.cos(th);
+    if (down <= 1e-6) return null;                    // ray never reaches the floor
+    const t = set.height / down;
+    const fwd = t * (f * Math.cos(th) - y * Math.sin(th));
+    if (fwd <= 0) return null;
+    const side = t * x;
+    return Math.max(0, Math.hypot(fwd, side) - set.offset);
+  }
+  window.saatTravel = travel; // exposed for testing
+
+  // ---------------- results, tracking, drawing ----------------
+  let pending = null;   // {id, w, h, r, px, py}
+  let shown = [];       // last drawn trash items
+  let frames = 0, fpsT0 = performance.now(), fps = 0, lastMs = 0;
+
+  function onResult(m) {
+    busy = false;
+    if (!pending || m.id !== pending.id) return;
+    const { w, h, r, px, py } = pending; pending = null;
+    lastMs = m.ms; frames++;
+    const now = performance.now();
+    if (now - fpsT0 > 1000) { fps = frames * 1000 / (now - fpsT0); frames = 0; fpsT0 = now; }
+    if (m.error) console.error(m.error);
+    const tilt = currentTilt();
+    const items = [];
+    for (const d of m.dets) {
+      if (d.cls >= TRASH.length) continue;          // not trash: never drawn
+      const box = {
+        x1: Math.max(0, (d.x1 - px) / r), y1: Math.max(0, (d.y1 - py) / r),
+        x2: Math.min(w, (d.x2 - px) / r), y2: Math.min(h, (d.y2 - py) / r)
+      };
+      let dist = travel((box.x1 + box.x2) / 2, box.y2, w, h, tilt);
+      const onFloor = dist != null && dist <= set.range * 100;
+      items.push({ ...box, name: CLASSES[d.cls], cls: d.cls, score: d.score, onFloor, dist: onFloor ? dist : null });
+    }
+    smooth(items);
+    shown = items; lastSize = { w, h };
+    draw();
+    updateCard();
+    if (mode !== "photo") setStatus(`${fps.toFixed(1)} checks/s · ${Math.round(lastMs)} ms`);
+    else setStatus(`Done in ${Math.round(lastMs)} ms`);
+  }
+
+  // match each new box to last frame's box of the same kind and blend the distance so the number is steady
+  function smooth(items) {
+    if (mode === "photo") return;
+    for (const it of items) {
+      if (it.dist == null) continue;
+      let best = null, bi = 0.3;
+      for (const p of shown) {
+        if (p.cls !== it.cls || p.dist == null) continue;
+        const v = iouBox(p, it); if (v > bi) { bi = v; best = p; }
+      }
+      if (best) it.dist = best.dist * 0.55 + it.dist * 0.45;
+    }
+  }
+  function iouBox(a, b) {
+    const ix = Math.max(0, Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1)), iy = Math.max(0, Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1));
+    const inter = ix * iy, u = (a.x2 - a.x1) * (a.y2 - a.y1) + (b.x2 - b.x1) * (b.y2 - b.y1) - inter;
+    return u > 0 ? inter / u : 0;
+  }
+
+  const fmtDist = cm => cm < 100 ? `${Math.round(cm)} cm` : `${(cm / 100).toFixed(1)} m`;
+
+  let lastSize = null;
+  function draw() {
+    const dpr = window.devicePixelRatio || 1, W = overlay.clientWidth, H = overlay.clientHeight;
+    if (overlay.width !== Math.round(W * dpr) || overlay.height !== Math.round(H * dpr)) { overlay.width = Math.round(W * dpr); overlay.height = Math.round(H * dpr); }
+    octx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    octx.clearRect(0, 0, W, H);
+    if (!lastSize || mode == null) return;
+    const s = Math.min(W / lastSize.w, H / lastSize.h), ox = (W - lastSize.w * s) / 2, oy = (H - lastSize.h * s) / 2;
+    const fs = Math.max(13, Math.min(18, Math.round(W / 45)));
+    octx.font = `600 ${fs}px Archivo, "Helvetica Neue", Arial, sans-serif`;
+    const nearest = nearestItem();
+    const order = [...shown].sort((a, b) => (a.onFloor - b.onFloor) || ((b.dist || 0) - (a.dist || 0)));
+    for (const it of order) {
+      const x = ox + it.x1 * s, y = oy + it.y1 * s, bw = (it.x2 - it.x1) * s, bh = (it.y2 - it.y1) * s;
+      const col = it.onFloor ? COL.trash : COL.off;
+      octx.lineWidth = it === nearest ? 4 : 2.5; octx.strokeStyle = col;
+      octx.strokeRect(x, y, bw, bh);
+      const txt = it.onFloor ? `${it.name} · ${fmtDist(it.dist)}` : `${it.name} · not on floor`;
+      const tw = octx.measureText(txt).width + 12, th = fs + 9;
+      const ty = y - th >= 0 ? y - th : y + bh;
+      octx.fillStyle = col; octx.fillRect(x, ty, tw, th);
+      octx.fillStyle = "#14070a"; octx.fillText(txt, x + 6, ty + fs + 1);
+      if (it.onFloor) {               // floor contact point
+        octx.beginPath(); octx.arc(x + bw / 2, y + bh, 4, 0, Math.PI * 2); octx.fillStyle = col; octx.fill();
+      }
+    }
+  }
+  function nearestItem() { return shown.filter(i => i.onFloor).sort((a, b) => a.dist - b.dist)[0] || null; }
+  function updateCard() {
+    const n = nearestItem(), d = $("nearDist");
+    if (n) { $("nearWhat").textContent = n.name; d.textContent = fmtDist(n.dist); d.classList.remove("none"); }
+    else {
+      const off = shown.find(i => !i.onFloor);
+      $("nearWhat").textContent = off ? `${off.name} (not on floor)` : "No trash seen";
+      d.textContent = "–"; d.classList.add("none");
+    }
+  }
+  function onSettingsChanged(k) {
+    if (mode === "photo" && k !== "conf") rerunPhoto();
+    else if (mode === "photo") rerunPhoto();
+    renderStatus();
+  }
+  window.addEventListener("resize", () => { draw(); checkTurn(); });
+
+  // ---------------- modes ----------------
+  let mode = null, stream = null, loopToken = 0, wakeLock = null, objectUrl = null;
+
+  function stopAll() {
+    loopToken++;
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    vid.pause(); vid.removeAttribute("src"); vid.srcObject = null; vid.load(); vid.hidden = true;
+    pic.hidden = true;
+    if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
+    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+    shown = []; pending = null; mode = null; draw();
+    $("btnLive").textContent = "Live"; $("btnLive").classList.remove("primary");
+    $("btnVideo").textContent = "Video";
+  }
+  function showHud() { $("intro").hidden = true; $("hudTop").hidden = false; }
+
+  function startLoop(src) {
+    const token = ++loopToken;
+    const tick = () => {
+      if (token !== loopToken) return;
+      const w = src.videoWidth, h = src.videoHeight;
+      if (ready && !busy && w && h && !src.paused && src.readyState >= 2) {
+        busy = true;
+        const p = preprocess(src, w, h);
+        pending = { id: ++runId, w, h, r: p.r, px: p.px, py: p.py };
+        worker.postMessage({ type: "run", id: runId, input: p.f, conf: set.conf / 100, nClasses: CLASSES.length }, [p.f.buffer]);
+      }
+      renderStatusThrottled();
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+  let lastStatusPaint = 0;
+  function renderStatusThrottled() { const n = performance.now(); if (n - lastStatusPaint > 400) { lastStatusPaint = n; renderStatus(); } }
+
+  async function startLive() {
+    stopAll();
+    if (set.auto) await enableMotion();          // iOS asks for motion permission here (needs the tap)
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("This browser cannot open the camera.");
+      stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } });
+    } catch (e) {
+      showHud();
+      setStatus(e && e.name === "NotAllowedError"
+        ? "Camera is blocked. iPhone Settings › Safari › Camera › Allow, then reload."
+        : "Could not open the camera: " + (e && e.message || e), true);
+      return;
+    }
+    mode = "live"; showHud();
+    vid.srcObject = stream; vid.hidden = false;
+    try { await vid.play(); } catch (e) {}
+    try { wakeLock = await navigator.wakeLock?.request("screen"); } catch (e) {}
+    $("btnLive").textContent = "Stop"; $("btnLive").classList.add("primary");
+    setStatus("Scanning…");
+    checkTurn();
+    startLoop(vid);
+  }
+  $("btnStart").onclick = startLive;
+  $("btnLive").onclick = () => mode === "live" ? (stopAll(), setStatus("Stopped")) : startLive();
+
+  // photo backup
+  $("btnPhoto").onclick = () => $("photoIn").click();
+  $("photoIn").onchange = e => {
+    const file = e.target.files[0]; e.target.value = ""; if (!file) return;
+    stopAll(); mode = "photo"; showHud();
+    objectUrl = URL.createObjectURL(file);
+    pic.onload = () => { pic.hidden = false; rerunPhoto(); };
+    pic.onerror = () => setStatus("That photo could not be opened.", true);
+    pic.src = objectUrl;
+  };
+  function rerunPhoto() {
+    if (mode !== "photo" || !pic.naturalWidth || !ready) return;
+    const w = pic.naturalWidth, h = pic.naturalHeight, p = preprocess(pic, w, h);
+    busy = true; pending = { id: ++runId, w, h, r: p.r, px: p.px, py: p.py };
+    setStatus("Looking…");
+    worker.postMessage({ type: "run", id: runId, input: p.f, conf: set.conf / 100, nClasses: CLASSES.length }, [p.f.buffer]);
+  }
+
+  // video backup
+  $("btnVideo").onclick = () => {
+    if (mode === "video") { if (vid.paused) vid.play().catch(() => {}); else vid.pause(); $("btnVideo").textContent = vid.paused ? "Play" : "Pause"; return; }
+    $("videoIn").click();
+  };
+  $("videoIn").onchange = async e => {
+    const file = e.target.files[0]; e.target.value = ""; if (!file) return;
+    stopAll(); mode = "video"; showHud();
+    objectUrl = URL.createObjectURL(file);
+    vid.src = objectUrl; vid.loop = true; vid.hidden = false;
+    try { await vid.play(); } catch (err) {}
+    vid.playbackRate = 0.5;
+    $("btnVideo").textContent = "Pause";
+    setStatus("Playing at half speed");
+    startLoop(vid);
+  };
+
+  function checkTurn() { $("turnHint").hidden = !(mode === "live" && window.innerHeight > window.innerWidth); }
+
+  setStatus("Loading model…");
+})();
+</script>
+</body>
+</html>
