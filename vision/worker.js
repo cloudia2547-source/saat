@@ -1,5 +1,7 @@
 // s'aat Vision - runs the trash model off the main thread so the camera view stays smooth.
-importScripts("ort.wasm.min.js");
+// ONNX Runtime Web 1.18 "core" build: single-threaded, normal (non-shared) memory.
+// Newer builds reserve 4 GB of shared memory up front, which iPhone/iPad Safari refuses ("RangeError: Out of memory").
+importScripts("ort.wasm-core.min.js");
 
 const S = 416;
 let session = null;
@@ -39,16 +41,29 @@ function decode(d, dims, nClasses, conf) {
 self.onmessage = async (e) => {
   const m = e.data;
   if (m.type === "init") {
+    ort.env.wasm.wasmPaths = new URL("./", self.location.href).href;
+    ort.env.wasm.numThreads = 1;
+    ort.env.wasm.proxy = false;
+    let firstErr = null;
     try {
-      ort.env.wasm.wasmPaths = new URL("./", self.location.href).href;
-      ort.env.wasm.numThreads = 1;
-      session = await ort.InferenceSession.create(m.model, {
-        executionProviders: ["wasm"],
-        graphOptimizationLevel: "all",
-      });
-      const warm = new Float32Array(3 * S * S);
-      await session.run({ images: new ort.Tensor("float32", warm, [1, 3, S, S]) });
-      postMessage({ type: "ready" });
+      const resp = await fetch(m.model);
+      if (!resp.ok) throw new Error("model download failed (HTTP " + resp.status + ")");
+      const bytes = new Uint8Array(await resp.arrayBuffer());
+      // try the fast SIMD engine first, then the plain one for older devices
+      for (const simd of [true, false]) {
+        try {
+          ort.env.wasm.simd = simd;
+          session = await ort.InferenceSession.create(bytes, { executionProviders: ["wasm"], graphOptimizationLevel: "all" });
+          const warm = new Float32Array(3 * S * S);
+          await session.run({ images: new ort.Tensor("float32", warm, [1, 3, S, S]) });
+          postMessage({ type: "ready", engine: simd ? "SIMD" : "basic" });
+          return;
+        } catch (err) {
+          firstErr = firstErr || err;
+          session = null;
+        }
+      }
+      throw firstErr;
     } catch (err) {
       postMessage({ type: "error", message: String((err && err.message) || err) });
     }
