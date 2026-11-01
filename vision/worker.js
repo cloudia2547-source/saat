@@ -15,12 +15,14 @@ function iou(a, b) {
 // output0: [1, 4 + nClasses + 32, N]  (cx, cy, w, h in 416-px letterbox space, then class scores, then mask coeffs)
 function decode(d, dims, nClasses, conf) {
   const N = dims[2], cand = [];
+  let topScore = 0, topCls = -1;            // strongest guess in the frame, even below the threshold (for diagnostics)
   for (let i = 0; i < N; i++) {
     let best = 0, bc = -1;
     for (let c = 0; c < nClasses; c++) {
       const s = d[(4 + c) * N + i];
       if (s > best) { best = s; bc = c; }
     }
+    if (best > topScore) { topScore = best; topCls = bc; }
     if (best < conf) continue;
     const cx = d[i], cy = d[N + i], w = d[2 * N + i], h = d[3 * N + i];
     cand.push({ x1: cx - w / 2, y1: cy - h / 2, x2: cx + w / 2, y2: cy + h / 2, score: best, cls: bc });
@@ -31,7 +33,7 @@ function decode(d, dims, nClasses, conf) {
     if (keep.every(k => iou(k, b) < 0.5)) keep.push(b);   // class-agnostic: one label per object
     if (keep.length >= 40) break;
   }
-  return keep;
+  return { keep, topScore, topCls };
 }
 
 self.onmessage = async (e) => {
@@ -52,11 +54,12 @@ self.onmessage = async (e) => {
     }
   } else if (m.type === "run") {
     const t0 = performance.now();
+    if (!session) { postMessage({ type: "result", id: m.id, dets: [], ms: 0, error: "model not loaded" }); return; }
     try {
       const res = await session.run({ images: new ort.Tensor("float32", m.input, [1, 3, S, S]) });
       const out = res.output0;
-      const dets = decode(out.data, out.dims, m.nClasses, m.conf);
-      postMessage({ type: "result", id: m.id, dets, ms: performance.now() - t0 });
+      const r = decode(out.data, out.dims, m.nClasses, m.conf);
+      postMessage({ type: "result", id: m.id, dets: r.keep, topScore: r.topScore, topCls: r.topCls, ms: performance.now() - t0 });
     } catch (err) {
       postMessage({ type: "result", id: m.id, dets: [], ms: 0, error: String((err && err.message) || err) });
     }
