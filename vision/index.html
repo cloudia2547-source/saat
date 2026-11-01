@@ -96,10 +96,6 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-hi);
 .switch { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
 .switch input { width: 22px; height: 22px; accent-color: var(--accent); }
 input[type=range] { width: 100%; accent-color: var(--accent); }
-.sheet h3 { margin: 6px 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
-.chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.chips span { font-size: 12.5px; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); }
-.chips.trash span { border-color: rgba(255, 77, 66, .55); }
 </style>
 </head>
 <body>
@@ -177,16 +173,6 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     <p>About 64° for the iPhone main camera in landscape video.</p>
   </div>
 
-  <div class="switch">
-    <label for="sDebug">Test mode: show everything it sees</label>
-    <input type="checkbox" id="sDebug">
-  </div>
-  <p class="note" style="margin-top:-8px">Grey boxes are things it decided are not trash. The top right shows its strongest guess, even when it is not sure enough to draw a box.</p>
-
-  <h3>Counted as trash</h3>
-  <div class="chips trash" id="chipsTrash"></div>
-  <h3>Checked but never boxed</h3>
-  <div class="chips" id="chipsKeep"></div>
   <p class="note">Distance is worked out from where the trash touches the floor, the phone height and its tilt. A bottle on a table can look like floor trash further away, because one camera cannot see depth.</p>
 </aside>
 
@@ -197,14 +183,14 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
   const KEEP  = ["shoe","cable","mobile phone","chair leg","person","bag","book","remote control","pet","trash bin","bollard","table","chair"];
   const CLASSES = TRASH.concat(KEEP);       // must match the order baked into model.onnx
   const S = 416;
-  const COL = { trash: "#ff4d42", off: "#ffb020", keep: "#a7b8b2" };
+  const COL = { trash: "#ff4d42", off: "#ffb020" };
 
   const $ = id => document.getElementById(id);
   const vid = $("vid"), pic = $("pic"), overlay = $("overlay"), octx = overlay.getContext("2d");
   const statusEl = $("status");
 
   // ---------------- settings ----------------
-  const DEF = { height: 120, offset: 0, auto: true, tilt: 45, range: 5, conf: 25, fov: 64, debug: false };
+  const DEF = { height: 120, offset: 0, auto: true, tilt: 45, range: 5, conf: 25, fov: 64 };
   let set = { ...DEF };
   try { Object.assign(set, JSON.parse(localStorage.getItem("saat-vision") || "{}")); } catch (e) {}
   const save = () => { try { localStorage.setItem("saat-vision", JSON.stringify(set)); } catch (e) {} };
@@ -215,13 +201,8 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     s.value = set[k]; o.textContent = fmt[k](set[k]);
     s.addEventListener("input", () => { set[k] = +s.value; o.textContent = fmt[k](set[k]); save(); onSettingsChanged(k); });
   }
-  if (/[?&]test\b/.test(location.search)) set.debug = true;
-  $("sDebug").checked = set.debug;
-  $("sDebug").addEventListener("change", e => { set.debug = e.target.checked; save(); if (mode === "photo") rerunPhoto(); });
   $("sAuto").checked = set.auto;
   $("sAuto").addEventListener("change", e => { set.auto = e.target.checked; save(); if (set.auto) enableMotion(); });
-  for (const t of TRASH) { const s = document.createElement("span"); s.textContent = t; $("chipsTrash").append(s); }
-  for (const t of KEEP)  { const s = document.createElement("span"); s.textContent = t; $("chipsKeep").append(s); }
   $("btnSettings").onclick = () => { $("sheet").hidden = false; };
   $("btnClose").onclick = () => { $("sheet").hidden = true; };
 
@@ -308,7 +289,6 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 
   // ---------------- results, tracking, drawing ----------------
   let pending = null;   // {id, w, h, r, px, py}
-  let lastSeen = { n: 0, top: "nothing" };
   let shown = [];       // last drawn trash items
   let frames = 0, fpsT0 = performance.now(), fps = 0, lastMs = 0;
 
@@ -322,18 +302,8 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     if (m.error) { console.error(m.error); setStatus("AI error: " + m.error, true); return; }
     const tilt = currentTilt();
     const items = [];
-    lastSeen = { n: m.dets.length, top: m.topCls >= 0 ? `${CLASSES[m.topCls]} ${Math.round(m.topScore * 100)}%` : "nothing" };
     for (const d of m.dets) {
-      if (d.cls >= TRASH.length) {                  // not trash: only drawn in test mode
-        if (set.debug) {
-          items.push({
-            x1: Math.max(0, (d.x1 - px) / r), y1: Math.max(0, (d.y1 - py) / r),
-            x2: Math.min(w, (d.x2 - px) / r), y2: Math.min(h, (d.y2 - py) / r),
-            name: CLASSES[d.cls], cls: d.cls, score: d.score, keep: true, onFloor: false, dist: null
-          });
-        }
-        continue;
-      }
+      if (d.cls >= TRASH.length) continue;          // not trash: checked so it isn't mistaken for trash, never drawn
       const box = {
         x1: Math.max(0, (d.x1 - px) / r), y1: Math.max(0, (d.y1 - py) / r),
         x2: Math.min(w, (d.x2 - px) / r), y2: Math.min(h, (d.y2 - py) / r)
@@ -347,14 +317,14 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     draw();
     updateCard();
     const head = mode !== "photo" ? `${fps.toFixed(1)} checks/s · ${Math.round(lastMs)} ms` : `Done in ${Math.round(lastMs)} ms`;
-    setStatus(set.debug ? `${head} · sees ${lastSeen.n} · best guess: ${lastSeen.top}` : head);
+    setStatus(head);
   }
 
   // match each new box to last frame's box of the same kind and blend the distance so the number is steady
   function smooth(items) {
     if (mode === "photo") return;
     for (const it of items) {
-      if (it.dist == null || it.keep) continue;
+      if (it.dist == null) continue;
       let best = null, bi = 0.3;
       for (const p of shown) {
         if (p.cls !== it.cls || p.dist == null) continue;
@@ -382,14 +352,13 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     const fs = Math.max(13, Math.min(18, Math.round(W / 45)));
     octx.font = `600 ${fs}px Archivo, "Helvetica Neue", Arial, sans-serif`;
     const nearest = nearestItem();
-    const order = [...shown].sort((a, b) => (!!b.keep - !!a.keep) || (a.onFloor - b.onFloor) || ((b.dist || 0) - (a.dist || 0)));
+    const order = [...shown].sort((a, b) => (a.onFloor - b.onFloor) || ((b.dist || 0) - (a.dist || 0)));
     for (const it of order) {
       const x = ox + it.x1 * s, y = oy + it.y1 * s, bw = (it.x2 - it.x1) * s, bh = (it.y2 - it.y1) * s;
-      const col = it.keep ? COL.keep : it.onFloor ? COL.trash : COL.off;
+      const col = it.onFloor ? COL.trash : COL.off;
       octx.lineWidth = it === nearest ? 4 : 2.5; octx.strokeStyle = col;
       octx.strokeRect(x, y, bw, bh);
-      let txt = it.keep ? `not trash · ${it.name}` : it.onFloor ? `${it.name} · ${fmtDist(it.dist)}` : `${it.name} · not on floor`;
-      if (set.debug) txt += ` · ${Math.round(it.score * 100)}%`;
+      const txt = it.onFloor ? `${it.name} · ${fmtDist(it.dist)}` : `${it.name} · not on floor`;
       const tw = octx.measureText(txt).width + 12, th = fs + 9;
       const ty = y - th >= 0 ? y - th : y + bh;
       octx.fillStyle = col; octx.fillRect(x, ty, tw, th);
@@ -404,7 +373,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     const n = nearestItem(), d = $("nearDist");
     if (n) { $("nearWhat").textContent = n.name; d.textContent = fmtDist(n.dist); d.classList.remove("none"); }
     else {
-      const off = shown.find(i => !i.onFloor && !i.keep);
+      const off = shown.find(i => !i.onFloor);
       $("nearWhat").textContent = off ? `${off.name} (not on floor)` : "No trash seen";
       d.textContent = "–"; d.classList.add("none");
     }
