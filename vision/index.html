@@ -179,8 +179,8 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 <script>
 (() => {
   // ---------------- config ----------------
-  const TRASH = ["plastic bottle","plastic cup","paper cup","can","snack wrapper","plastic bag","food scraps","cigarette butt","crumpled paper","straw"];
-  const KEEP  = ["shoe","cable","mobile phone","chair leg","person","bag","book","remote control","pet","trash bin","bollard","table","chair"];
+  const TRASH = ["plastic bottle","plastic cup","paper cup","can","snack wrapper","plastic bag","food scraps","cigarette butt","crumpled paper","straw","tissue","milk carton","takeaway food box","bottle cap","plastic spoon","plastic fork","ice cream stick","receipt","candy wrapper","foam box","banana peel","apple core"];
+  const KEEP  = ["shoe","cable","mobile phone","chair leg","person","bag","book","remote control","pet","trash bin","bollard","table","chair","banana","apple"];
   const CLASSES = TRASH.concat(KEEP);       // must match the order baked into model.onnx
   const S = 416;
   const COL = { trash: "#ff4d42", off: "#ffb020" };
