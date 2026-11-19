@@ -7,7 +7,7 @@
 <title>s'aat Crowd Test</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 26'%3E%3Crect x='1' y='1' width='32' height='24' rx='6' fill='%23061315' stroke='%233cc463' stroke-width='2'/%3E%3Ccircle cx='17' cy='13' r='5' fill='none' stroke='%237dffa0' stroke-width='2.6'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
 <style>
 /* Layout: full-screen camera stage (landscape first). Instruction card top-left, status top-right, mini-map bottom-right, controls bottom-centre. Colours follow the s'aat site. */
 :root {
@@ -24,7 +24,13 @@
   --wait: #ffc94a;
   --back: #ff6b5e;
   --person: #9fd8ff;
-  --f-ui: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --bubble: #f6fff4;     /* speech bubble */
+  --bubble-ink: #0b2a24;
+  --bubble-muted: #3f5f57;
+  --say-go: #0b7d3a;
+  --say-wait: #8f6200;
+  --say-back: #c0392b;
+  --f-ui: "Fredoka", "Trebuchet MS", "Helvetica Neue", Arial, sans-serif;
   --f-num: "JetBrains Mono", ui-monospace, Menlo, monospace;
   color-scheme: dark;
 }
@@ -49,36 +55,14 @@ body { overflow: hidden; overscroll-behavior: none; }
 .intro .tip { font-size: 13px; }
 
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-.hud-top {
-  position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
-  padding: calc(env(safe-area-inset-top) + 10px) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
-  pointer-events: none;
-}
-.instr { padding: 10px 16px 12px; min-width: 0; max-width: min(58%, 420px); border-width: 2px; }
-.instr .act { font-weight: 800; font-size: clamp(26px, 4.6vw, 40px); line-height: 1.05; letter-spacing: .01em; display: flex; gap: 10px; align-items: center; }
-.instr .act .g { font-family: var(--f-num); font-weight: 700; }
-.instr .why { font-size: 14px; color: var(--fg); margin-top: 4px; }
-.instr .tgt { font-size: 13px; color: var(--muted); margin-top: 6px; font-family: var(--f-num); }
-.instr .tgt b { color: var(--trash); font-weight: 700; }
-.instr[data-a="GO"], .instr[data-a="LEFT"], .instr[data-a="RIGHT"] { border-color: var(--accent); }
-.instr[data-a="GO"] .act, .instr[data-a="LEFT"] .act, .instr[data-a="RIGHT"] .act { color: var(--accent-hi); }
-.instr[data-a="WAIT"] { border-color: var(--wait); } .instr[data-a="WAIT"] .act { color: var(--wait); }
-.instr[data-a="BACK"] { border-color: var(--back); } .instr[data-a="BACK"] .act { color: var(--back); }
-.instr[data-a="REACHED"] { border-color: var(--trash); } .instr[data-a="REACHED"] .act { color: var(--trash); }
-.status { max-width: 40%; padding: 7px 11px; font-family: var(--f-num); font-size: 12px; color: var(--muted); text-align: right; line-height: 1.5; }
-.status b { color: var(--accent-hi); font-weight: 500; }
-.status.err { color: var(--trash); }
 
 .mapbox {
-  position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: calc(env(safe-area-inset-bottom) + 70px);
-  width: min(34vh, 34vw, 240px); aspect-ratio: 1; padding: 0; overflow: hidden; pointer-events: none;
+  position: absolute; right: max(12px, env(safe-area-inset-right)); top: calc(env(safe-area-inset-top) + 52px);
+  width: min(34vh, 34vw, 220px); aspect-ratio: 1; overflow: hidden; pointer-events: none;
+  background: var(--panel); border-radius: 22px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
 }
 #map { width: 100%; height: 100%; display: block; }
 
-.hud-bottom {
-  position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap;
-  padding: 0 max(12px, env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 12px) max(12px, env(safe-area-inset-left));
-}
 button {
   font-family: var(--f-ui); font-size: 15px; font-weight: 600; color: var(--fg);
   background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
@@ -114,6 +98,56 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .snd .src { font-size: 12px; color: var(--muted); }
 .snd .btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .snd button.rec { border-color: var(--trash); color: var(--trash); }
+/* ---- Companion HUD: s'aat's face + speech bubble bottom-left, status pill top-right, control dock bottom-right ---- */
+.pill {
+  position: absolute; top: calc(env(safe-area-inset-top) + 10px); right: max(12px, env(safe-area-inset-right));
+  max-width: min(60%, 460px); display: flex; align-items: center; gap: 8px;
+  background: var(--panel); border-radius: 999px; padding: 6px 14px 6px 10px;
+  font-size: 13px; font-weight: 500; color: var(--fg); line-height: 1.3; pointer-events: none;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.pill::before { content: ""; flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+.pill b { color: var(--accent-hi); font-weight: 600; }
+.pill.err { color: #ffd2cd; }
+.pill.err::before { background: var(--trash); }
+
+.hud-bottom {
+  position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; flex-wrap: wrap;
+  padding: 0 max(12px, env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 12px) max(12px, env(safe-area-inset-left));
+  pointer-events: none;
+}
+.hud-bottom > * { pointer-events: auto; }
+.hud-bottom:has(> .buddy[hidden]) { justify-content: center; }
+
+.buddy { display: flex; align-items: flex-end; gap: 10px; min-width: 0; flex: 0 1 470px; pointer-events: none !important; }
+.face {
+  flex: none; width: 84px; height: 64px; display: grid; place-items: center;
+  background: var(--bg); border: 3px solid var(--state, var(--accent)); border-radius: 18px;
+}
+.face svg { width: 80%; height: 80%; overflow: visible; }
+.face path { fill: none; stroke: var(--accent-hi); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.face .fill { fill: var(--accent-hi); }
+@media (prefers-reduced-motion: no-preference) { .face #fEyes { transition: transform .35s ease; } .face { transition: border-color .2s; } }
+
+.bubble {
+  min-width: 0; background: var(--bubble); color: var(--bubble-ink);
+  border-radius: 20px 20px 20px 5px; padding: 9px 15px 11px; display: flex; flex-direction: column; gap: 2px;
+}
+.bubble .say { font-size: clamp(17px, 2.6vw, 22px); font-weight: 700; line-height: 1.15; }
+.bubble .say em { font-style: normal; color: var(--say, var(--say-go)); }
+.bubble .why { font-size: 14px; font-weight: 500; color: var(--bubble-muted); line-height: 1.3; }
+.bubble .why:empty { display: none; }
+.bubble .tgt { font-size: 13px; font-weight: 600; color: var(--bubble-muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+.bubble .tgt b { background: var(--trash); color: #fff; border-radius: 999px; padding: 0 8px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.dock {
+  display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--panel); flex-wrap: wrap; justify-content: center;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.dock button { background: transparent; border: 0; min-height: 42px; padding: 9px 16px; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.dock button.primary, .dock button.on { background: var(--accent); color: #032010; }
+
+.intro .face { width: 104px; height: 78px; border-radius: 22px; }
 </style>
 </head>
 <body>
@@ -124,6 +158,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 
   <div class="intro" id="intro">
     <div class="intro-inner">
+      <div class="face" aria-hidden="true"><svg viewBox="0 0 40 30"><path d="M6 15a5 5 0 0 1 9 0"/><path d="M25 15a5 5 0 0 1 9 0"/><path d="M12 21q8 6 16 0"/></svg></div>
       <h1>s'aat <span>Crowd Test</span></h1>
       <p>Be the robot. Hold the phone sideways at s'aat's height and point it ahead. s'aat watches the people, predicts where they will walk, and tells you which way to go to reach the trash.</p>
       <button class="primary big" id="btnStart" disabled>Loading model…</button>
@@ -131,24 +166,23 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     </div>
   </div>
 
-  <div class="hud-top" id="hudTop" hidden>
-    <div class="card instr" id="instr" data-a="GO" aria-live="polite">
-      <div class="act"><span class="g" id="actGlyph">↑</span><span id="actWord">Starting</span></div>
-      <div class="why" id="actWhy">Looking around…</div>
-      <div class="tgt" id="actTgt">No trash yet</div>
-    </div>
-    <div class="card status" id="status" role="status">Starting…</div>
-  </div>
+  <div class="pill" id="status" role="status" hidden>Starting…</div>
 
-  <div class="card mapbox" id="mapbox" hidden><canvas id="map"></canvas></div>
+  <div class="mapbox" id="mapbox" hidden><canvas id="map"></canvas></div>
 
   <div class="card turn" id="turnHint" hidden>Turn the phone sideways<br><span style="color:var(--muted);font-size:12px">Rotation lock must be off</span></div>
 
   <div class="hud-bottom">
-    <button id="btnLive">Live</button>
-    <button id="btnWalk">Standing</button>
-    <button id="btnVideo">Video</button>
-    <button id="btnSettings">Settings</button>
+    <div class="buddy" id="buddy" hidden aria-live="polite">
+      <div class="face" id="face"><svg viewBox="0 0 40 30" aria-hidden="true"><g id="fEyes"><path id="fEyeL" d="M6 15a5 5 0 0 1 9 0"/><path id="fEyeR" d="M25 15a5 5 0 0 1 9 0"/></g><path id="fMouth" d="M12 21q8 6 16 0"/></svg></div>
+      <div class="bubble"><div class="say" id="say">Looking around…</div><div class="why" id="why"></div><div class="tgt" id="tgt">No trash yet</div></div>
+    </div>
+    <div class="dock">
+      <button id="btnLive">Live</button>
+      <button id="btnWalk">Standing</button>
+      <button id="btnVideo">Video</button>
+      <button id="btnSettings">Settings</button>
+    </div>
   </div>
 </div>
 
@@ -215,7 +249,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
   const CLASSES = TRASH.concat(KEEP);       // must match the order baked into ../model.onnx
   const PERSON = CLASSES.indexOf("person");
   const S = 416, C = window.SaatCrowd;
-  const COL = { trash: "#ff4d42", person: "#9fd8ff", route: "#7dffa0", wait: "#ffc94a", back: "#ff6b5e" };
+  const COL = { trash: "#ff4d42", off: "#ffb020", person: "#9fd8ff", route: "#7dffa0", wait: "#ffc94a", back: "#ff6b5e" };
   const $ = id => document.getElementById(id);
   const vid = $("vid"), overlay = $("overlay"), octx = overlay.getContext("2d"), map = $("map"), mctx = map.getContext("2d");
   const statusEl = $("status");
@@ -250,17 +284,35 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
   $("btnWalk").onclick = () => { set.walking = !set.walking; save(); paintWalk(); resetWorld(); };
   paintWalk();
 
+  // ---------------- s'aat face ----------------
+  const FACES = {
+    happy:   ["M6 15a5 5 0 0 1 9 0", "M25 15a5 5 0 0 1 9 0", "M12 21q8 6 16 0", false],
+    look:    ["M6 15a5 5 0 0 1 9 0", "M25 15a5 5 0 0 1 9 0", "M13 22q7 4 14 0", false],
+    flat:    ["M6 13h9", "M25 13h9", "M14 23h12", false],
+    worried: ["M6 12l9 3", "M34 12l-9 3", "M13 25q7 -5 14 0", false],
+    big:     ["M6 15a5 5 0 0 1 9 0", "M25 15a5 5 0 0 1 9 0", "M10 20q10 10 20 0z", true]
+  };
+  function setFace(kind, dx) {
+    const f = FACES[kind] || FACES.happy;
+    $("fEyeL").setAttribute("d", f[0]); $("fEyeR").setAttribute("d", f[1]);
+    const m = $("fMouth"); m.setAttribute("d", f[2]); m.classList.toggle("fill", f[3]);
+    const x = Math.max(-1, Math.min(1, dx || 0)) * 2.6;
+    $("fEyes").setAttribute("transform", `translate(${x.toFixed(2)} 0)`);
+  }
+  // speech bubble: parts are [text, emphasised?] pairs, set with textContent only
+  function say(parts) {
+    const el = $("say"); el.textContent = "";
+    for (const [t, em] of parts) { if (em) { const e = document.createElement("em"); e.textContent = t; el.append(e); } else el.append(t); }
+  }
+
   // ---------------- status ----------------
   let statusMain = "", statusErr = false;
   function setStatus(t, err) { statusMain = t; statusErr = !!err; renderStatus(); }
   function renderStatus() {
     statusEl.classList.toggle("err", statusErr);
-    statusEl.textContent = "";
-    const a = document.createElement("div"); a.textContent = statusMain;
-    const b = document.createElement("div");
-    b.innerHTML = sensorLive() ? `tilt <b>${Math.round(sensorTilt)}°</b> · turn <b>on</b>` : `tilt ${set.tilt}° (manual)`;
-    const c = document.createElement("div"); c.textContent = `${people.filter(p => p.hits >= 2).length} people tracked · ${set.walking ? "walking" : "standing"}`;
-    statusEl.append(a, b, c);
+    const tilt = document.createElement("span");
+    tilt.innerHTML = sensorLive() ? `tilt <b>${Math.round(sensorTilt)}°</b>` : `tilt ${set.tilt}° (manual)`;
+    statusEl.textContent = statusMain + " · "; statusEl.append(tilt, ` · ${people.filter(p => p.hits >= 2).length} people · ${set.walking ? "walking" : "standing"}`);
   }
 
   // ---------------- motion sensor: tilt + heading ----------------
@@ -427,7 +479,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
   worker.onmessage = e => {
     const m = e.data;
     if (m.type === "ready") { ready = true; const b = $("btnStart"); b.disabled = false; b.textContent = "Start crowd test"; setStatus("Ready"); }
-    else if (m.type === "error") { $("btnStart").textContent = "Model failed to load"; $("hudTop").hidden = false; setStatus("Model failed to load: " + m.message, true); }
+    else if (m.type === "error") { $("btnStart").textContent = "Model failed to load"; $("status").hidden = false; setStatus("Model failed to load: " + m.message, true); }
     else if (m.type === "result") onResult(m);
   };
   worker.postMessage({ type: "init", model: new URL("../model.onnx", location.href).href });
@@ -577,15 +629,30 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     }
     // trash boxes
     const fs = Math.max(13, Math.min(18, Math.round(W / 45)));
-    octx.font = `600 ${fs}px Archivo, "Helvetica Neue", Arial, sans-serif`;
+    octx.font = `600 ${fs}px Fredoka, "Trebuchet MS", Arial, sans-serif`;
     for (const it of shownTrash) {
       const x = ox + it.x1 * s, y = oy + it.y1 * s, bw = (it.x2 - it.x1) * s, bh = (it.y2 - it.y1) * s;
-      const col = it.onFloor ? COL.trash : "#ffb020";
-      octx.lineWidth = 2.5; octx.strokeStyle = col; octx.strokeRect(x, y, bw, bh);
+      const col = it.onFloor ? COL.trash : COL.off;
       const txt = it.onFloor ? `${it.name} · ${fmtDist(it.dist)}` : `${it.name} · not on floor`;
-      const tw = octx.measureText(txt).width + 12, th = fs + 9, ty = y - th >= 0 ? y - th : y + bh;
-      octx.fillStyle = col; octx.fillRect(x, ty, tw, th); octx.fillStyle = "#14070a"; octx.fillText(txt, x + 6, ty + fs + 1);
+      trashBox(octx, x, y, bw, bh, col, txt, fs, goal && it.name === goal.name && it.onFloor, W, H);
     }
+  }
+  // dashed rounded trash box with a pill label under it (above if it would leave the screen)
+  function trashBox(c, x, y, bw, bh, col, txt, fs, strong, W, H) {
+    c.save();
+    rr(c, x, y, bw, bh, Math.min(14, bw / 4, bh / 4));
+    c.fillStyle = col === COL.trash ? "rgba(255,77,66,.10)" : "rgba(255,176,32,.08)"; c.fill();
+    c.lineWidth = strong ? 3.5 : 2.5; c.strokeStyle = col; c.setLineDash(strong ? [] : [8, 6]); c.stroke(); c.setLineDash([]);
+    const tw = c.measureText(txt).width + fs * 1.2, th = fs + 10;
+    let tx = Math.max(4, Math.min(W - tw - 4, x + bw / 2 - tw / 2)), ty = y + bh + 6;
+    if (ty + th > H - 4) ty = Math.max(4, y - th - 6);
+    rr(c, tx, ty, tw, th, th / 2); c.fillStyle = col; c.fill();
+    c.fillStyle = col === COL.trash ? "#fff" : "#2a1800"; c.fillText(txt, tx + fs * 0.6, ty + fs + 2);
+    c.restore();
+  }
+  function rr(c, x, y, w, h, r) {
+    r = Math.max(0, Math.min(r, w / 2, h / 2)); c.beginPath();
+    c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
   }
   function roundRect(c, x, y, w, h, r) {
     r = Math.min(r, w / 2, h / 2); c.beginPath();
@@ -641,23 +708,32 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     c.fillStyle = "#032010"; c.beginPath(); c.moveTo(cx, cy - rw * 0.4 - 6); c.lineTo(cx - 5, cy - rw * 0.4); c.lineTo(cx + 5, cy - rw * 0.4); c.closePath(); c.fill();
   }
 
+  // what s'aat says for each action: [face, state colour, words]
   const ACT = {
-    GO: ["↑", "GO"], LEFT: ["↖", "TURN LEFT"], RIGHT: ["↗", "TURN RIGHT"], WAIT: ["✋", "WAIT"], BACK: ["↓", "BACK OFF"], REACHED: ["✓", "PICK IT UP"]
+    GO:      ["happy",   "var(--accent)", "var(--say-go)",   () => [["Go ", false], ["straight ahead", true]]],
+    LEFT:    ["look",    "var(--accent)", "var(--say-go)",   d => [["Turn ", false], [`left ${d}°`, true]]],
+    RIGHT:   ["look",    "var(--accent)", "var(--say-go)",   d => [["Turn ", false], [`right ${d}°`, true]]],
+    WAIT:    ["flat",    "var(--wait)",   "var(--say-wait)", () => [["Wait", true], [" here", false]]],
+    BACK:    ["worried", "var(--back)",   "var(--say-back)", () => [["Back off", true], [", slowly", false]]],
+    REACHED: ["big",     "var(--trash)",  "var(--say-back)", () => [["Got it! ", false], ["Pick it up", true]]]
   };
   function paintInstruction() {
     if (!decision) return;
-    const a = ACT[decision.action] || ["·", decision.action];
-    $("instr").dataset.a = decision.action;
-    $("actGlyph").textContent = a[0];
-    let word = a[1];
-    if ((decision.action === "LEFT" || decision.action === "RIGHT") && decision.rel != null) word += ` ${Math.round(Math.abs(decision.rel) * 180 / Math.PI)}°`;
-    $("actWord").textContent = word;
-    $("actWhy").textContent = decision.reason || "";
-    const tg = $("actTgt"); tg.textContent = "";
+    const a = ACT[decision.action] || ACT.GO;
+    const deg = decision.rel != null ? Math.round(Math.abs(decision.rel) * 180 / Math.PI) : 0;
+    const dx = decision.action === "LEFT" ? -1 : decision.action === "RIGHT" ? 1 : 0;
+    const buddy = $("buddy");
+    buddy.dataset.a = decision.action;
+    buddy.style.setProperty("--state", a[1]);
+    buddy.style.setProperty("--say", a[2]);
+    setFace(a[0], dx);
+    say(a[3](deg));
+    $("why").textContent = decision.reason || "";
+    const tg = $("tgt"); tg.textContent = "";
     if (goal) {
       const d = Math.hypot(goal.x - robot.x, goal.y - robot.y);
-      tg.append("Target: " + goal.name + " · "); const b = document.createElement("b"); b.textContent = fmtDist(d); tg.append(b);
-    } else tg.textContent = "No trash yet · patrolling ahead";
+      tg.append("Target: " + goal.name); const b = document.createElement("b"); b.textContent = fmtDist(d); tg.append(b);
+    } else tg.textContent = "No trash yet, patrolling ahead";
   }
 
   // ---------------- modes ----------------
@@ -671,7 +747,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     pending = null; mode = null; shownTrash = []; shownPeople = []; drawOverlay();
     $("btnLive").textContent = "Live"; $("btnLive").classList.remove("primary"); $("btnVideo").textContent = "Video";
   }
-  function showHud() { $("intro").hidden = true; $("hudTop").hidden = false; $("mapbox").hidden = false; }
+  function showHud() { $("intro").hidden = true; $("status").hidden = false; $("buddy").hidden = false; $("mapbox").hidden = false; }
   function startLoop(src) {
     const token = ++loopToken;
     const tick = () => {

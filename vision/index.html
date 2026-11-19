@@ -7,7 +7,7 @@
 <title>s'aat Vision</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 26'%3E%3Crect x='1' y='1' width='32' height='24' rx='6' fill='%23061315' stroke='%233cc463' stroke-width='2'/%3E%3Ccircle cx='17' cy='13' r='5' fill='none' stroke='%237dffa0' stroke-width='2.6'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
 <style>
 /* Layout: full-screen camera stage (landscape first). HUD floats on top: nearest-trash card top-left, status top-right, controls along the bottom. Colours follow the s'aat site. */
 :root {
@@ -21,7 +21,13 @@
   --accent-hi: #7dffa0;
   --trash: #ff4d42;      /* trash on the floor */
   --off: #ffb020;        /* trash, not on the floor */
-  --f-ui: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --bubble: #f6fff4;     /* speech bubble */
+  --bubble-ink: #0b2a24;
+  --bubble-muted: #3f5f57;
+  --say-go: #0b7d3a;
+  --say-wait: #8f6200;
+  --say-back: #c0392b;
+  --f-ui: "Fredoka", "Trebuchet MS", "Helvetica Neue", Arial, sans-serif;
   --f-num: "JetBrains Mono", ui-monospace, Menlo, monospace;
   color-scheme: dark;
 }
@@ -46,26 +52,7 @@ body { overflow: hidden; overscroll-behavior: none; }
 .intro p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.5; text-wrap: balance; }
 .intro .tip { font-size: 13px; }
 
-/* HUD */
-.hud-top {
-  position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
-  padding: calc(env(safe-area-inset-top) + 10px) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
-  pointer-events: none;
-}
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-.nearest { padding: 10px 14px; min-width: 0; max-width: 60%; }
-.nearest .k { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
-.nearest .what { font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.nearest .dist { font-family: var(--f-num); font-weight: 700; font-size: 34px; line-height: 1.05; color: var(--trash); font-variant-numeric: tabular-nums; }
-.nearest .dist.none { color: var(--muted); font-size: 20px; }
-.status { max-width: 46%; padding: 7px 11px; font-family: var(--f-num); font-size: 12px; color: var(--muted); text-align: right; line-height: 1.5; }
-.status b { color: var(--accent-hi); font-weight: 500; }
-.status.err { color: var(--trash); }
 
-.hud-bottom {
-  position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap;
-  padding: 0 max(12px, env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 12px) max(12px, env(safe-area-inset-left));
-}
 button {
   font-family: var(--f-ui); font-size: 15px; font-weight: 600; color: var(--fg);
   background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
@@ -96,6 +83,56 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-hi);
 .switch { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
 .switch input { width: 22px; height: 22px; accent-color: var(--accent); }
 input[type=range] { width: 100%; accent-color: var(--accent); }
+/* ---- Companion HUD: s'aat's face + speech bubble bottom-left, status pill top-right, control dock bottom-right ---- */
+.pill {
+  position: absolute; top: calc(env(safe-area-inset-top) + 10px); right: max(12px, env(safe-area-inset-right));
+  max-width: min(60%, 460px); display: flex; align-items: center; gap: 8px;
+  background: var(--panel); border-radius: 999px; padding: 6px 14px 6px 10px;
+  font-size: 13px; font-weight: 500; color: var(--fg); line-height: 1.3; pointer-events: none;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.pill::before { content: ""; flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+.pill b { color: var(--accent-hi); font-weight: 600; }
+.pill.err { color: #ffd2cd; }
+.pill.err::before { background: var(--trash); }
+
+.hud-bottom {
+  position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; flex-wrap: wrap;
+  padding: 0 max(12px, env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 12px) max(12px, env(safe-area-inset-left));
+  pointer-events: none;
+}
+.hud-bottom > * { pointer-events: auto; }
+.hud-bottom:has(> .buddy[hidden]) { justify-content: center; }
+
+.buddy { display: flex; align-items: flex-end; gap: 10px; min-width: 0; flex: 0 1 470px; pointer-events: none !important; }
+.face {
+  flex: none; width: 84px; height: 64px; display: grid; place-items: center;
+  background: var(--bg); border: 3px solid var(--state, var(--accent)); border-radius: 18px;
+}
+.face svg { width: 80%; height: 80%; overflow: visible; }
+.face path { fill: none; stroke: var(--accent-hi); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.face .fill { fill: var(--accent-hi); }
+@media (prefers-reduced-motion: no-preference) { .face #fEyes { transition: transform .35s ease; } .face { transition: border-color .2s; } }
+
+.bubble {
+  min-width: 0; background: var(--bubble); color: var(--bubble-ink);
+  border-radius: 20px 20px 20px 5px; padding: 9px 15px 11px; display: flex; flex-direction: column; gap: 2px;
+}
+.bubble .say { font-size: clamp(17px, 2.6vw, 22px); font-weight: 700; line-height: 1.15; }
+.bubble .say em { font-style: normal; color: var(--say, var(--say-go)); }
+.bubble .why { font-size: 14px; font-weight: 500; color: var(--bubble-muted); line-height: 1.3; }
+.bubble .why:empty { display: none; }
+.bubble .tgt { font-size: 13px; font-weight: 600; color: var(--bubble-muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 2px; }
+.bubble .tgt b { background: var(--trash); color: #fff; border-radius: 999px; padding: 0 8px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.dock {
+  display: flex; gap: 4px; padding: 4px; border-radius: 999px; background: var(--panel); flex-wrap: wrap; justify-content: center;
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.dock button { background: transparent; border: 0; min-height: 42px; padding: 9px 16px; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.dock button.primary, .dock button.on { background: var(--accent); color: #032010; }
+
+.intro .face { width: 104px; height: 78px; border-radius: 22px; }
 </style>
 </head>
 <body>
@@ -107,6 +144,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 
   <div class="intro" id="intro">
     <div class="intro-inner">
+      <div class="face" aria-hidden="true"><svg viewBox="0 0 40 30"><path d="M6 15a5 5 0 0 1 9 0"/><path d="M25 15a5 5 0 0 1 9 0"/><path d="M12 21q8 6 16 0"/></svg></div>
       <h1>s'aat <span>Vision</span></h1>
       <p>Hold the phone sideways and point it at the floor. Trash gets a red box with how far the robot has to travel to reach it.</p>
       <button class="primary big" id="btnStart" disabled>Loading model…</button>
@@ -114,22 +152,21 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     </div>
   </div>
 
-  <div class="hud-top" id="hudTop" hidden>
-    <div class="card nearest" aria-live="polite">
-      <div class="k">Nearest trash</div>
-      <div class="what" id="nearWhat">Scanning…</div>
-      <div class="dist none" id="nearDist">–</div>
-    </div>
-    <div class="card status" id="status" role="status">Starting…</div>
-  </div>
+  <div class="pill" id="status" role="status" hidden>Starting…</div>
 
   <div class="card turn" id="turnHint" hidden>Turn the phone sideways<br><span style="color:var(--muted);font-size:12px">Rotation lock must be off</span></div>
 
-  <div class="hud-bottom" id="hudBottom">
-    <button id="btnLive">Live</button>
-    <button id="btnPhoto">Photo</button>
-    <button id="btnVideo">Video</button>
-    <button id="btnSettings">Settings</button>
+  <div class="hud-bottom">
+    <div class="buddy" id="buddy" hidden aria-live="polite">
+      <div class="face" id="face"><svg viewBox="0 0 40 30" aria-hidden="true"><g id="fEyes"><path id="fEyeL" d="M6 15a5 5 0 0 1 9 0"/><path id="fEyeR" d="M25 15a5 5 0 0 1 9 0"/></g><path id="fMouth" d="M12 21q8 6 16 0"/></svg></div>
+      <div class="bubble"><div class="say" id="say">Looking for trash…</div><div class="why" id="why"></div></div>
+    </div>
+    <div class="dock">
+      <button id="btnLive">Live</button>
+      <button id="btnPhoto">Photo</button>
+      <button id="btnVideo">Video</button>
+      <button id="btnSettings">Settings</button>
+    </div>
   </div>
 </div>
 
@@ -206,16 +243,35 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
   $("btnSettings").onclick = () => { $("sheet").hidden = false; };
   $("btnClose").onclick = () => { $("sheet").hidden = true; };
 
+  // ---------------- s'aat face ----------------
+  const FACES = {
+    happy:   ["M6 15a5 5 0 0 1 9 0", "M25 15a5 5 0 0 1 9 0", "M12 21q8 6 16 0", false],
+    look:    ["M6 15a5 5 0 0 1 9 0", "M25 15a5 5 0 0 1 9 0", "M13 22q7 4 14 0", false],
+    flat:    ["M6 13h9", "M25 13h9", "M14 23h12", false],
+    worried: ["M6 12l9 3", "M34 12l-9 3", "M13 25q7 -5 14 0", false],
+    big:     ["M6 15a5 5 0 0 1 9 0", "M25 15a5 5 0 0 1 9 0", "M10 20q10 10 20 0z", true]
+  };
+  function setFace(kind, dx) {
+    const f = FACES[kind] || FACES.happy;
+    $("fEyeL").setAttribute("d", f[0]); $("fEyeR").setAttribute("d", f[1]);
+    const m = $("fMouth"); m.setAttribute("d", f[2]); m.classList.toggle("fill", f[3]);
+    const x = Math.max(-1, Math.min(1, dx || 0)) * 2.6;
+    $("fEyes").setAttribute("transform", `translate(${x.toFixed(2)} 0)`);
+  }
+  // speech bubble: parts are [text, emphasised?] pairs, set with textContent only
+  function say(parts) {
+    const el = $("say"); el.textContent = "";
+    for (const [t, em] of parts) { if (em) { const e = document.createElement("em"); e.textContent = t; el.append(e); } else el.append(t); }
+  }
+
   // ---------------- status ----------------
   let statusMain = "", statusErr = false;
   function setStatus(t, err) { statusMain = t; statusErr = !!err; renderStatus(); }
   function renderStatus() {
     statusEl.classList.toggle("err", statusErr);
     const tiltTxt = tiltSource() === "sensor" ? `tilt <b>${Math.round(sensorTilt)}°</b>` : `tilt ${set.tilt}° (manual)`;
-    statusEl.innerHTML = "";
-    const a = document.createElement("div"); a.textContent = statusMain;
-    const b = document.createElement("div"); b.innerHTML = tiltTxt;
-    statusEl.append(a, b);
+    const tiltPart = document.createElement("span"); tiltPart.innerHTML = tiltTxt;
+    statusEl.textContent = statusMain + " · "; statusEl.append(tiltPart);
   }
 
   // ---------------- motion sensor tilt ----------------
@@ -254,7 +310,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     } else if (m.type === "error") {
       $("btnStart").textContent = "Model failed to load";
       setStatus("Model failed to load: " + m.message, true);
-      $("hudTop").hidden = false;
+      $("status").hidden = false;
     } else if (m.type === "result") onResult(m);
   };
   worker.postMessage({ type: "init", model: new URL("model.onnx", location.href).href });
@@ -350,33 +406,56 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     if (!lastSize || mode == null) return;
     const s = Math.min(W / lastSize.w, H / lastSize.h), ox = (W - lastSize.w * s) / 2, oy = (H - lastSize.h * s) / 2;
     const fs = Math.max(13, Math.min(18, Math.round(W / 45)));
-    octx.font = `600 ${fs}px Archivo, "Helvetica Neue", Arial, sans-serif`;
+    octx.font = `600 ${fs}px Fredoka, "Trebuchet MS", Arial, sans-serif`;
     const nearest = nearestItem();
     const order = [...shown].sort((a, b) => (a.onFloor - b.onFloor) || ((b.dist || 0) - (a.dist || 0)));
     for (const it of order) {
       const x = ox + it.x1 * s, y = oy + it.y1 * s, bw = (it.x2 - it.x1) * s, bh = (it.y2 - it.y1) * s;
       const col = it.onFloor ? COL.trash : COL.off;
-      octx.lineWidth = it === nearest ? 4 : 2.5; octx.strokeStyle = col;
-      octx.strokeRect(x, y, bw, bh);
       const txt = it.onFloor ? `${it.name} · ${fmtDist(it.dist)}` : `${it.name} · not on floor`;
-      const tw = octx.measureText(txt).width + 12, th = fs + 9;
-      const ty = y - th >= 0 ? y - th : y + bh;
-      octx.fillStyle = col; octx.fillRect(x, ty, tw, th);
-      octx.fillStyle = "#14070a"; octx.fillText(txt, x + 6, ty + fs + 1);
+      trashBox(octx, x, y, bw, bh, col, txt, fs, it === nearest, W, H);
       if (it.onFloor) {               // floor contact point
         octx.beginPath(); octx.arc(x + bw / 2, y + bh, 4, 0, Math.PI * 2); octx.fillStyle = col; octx.fill();
       }
     }
   }
+  // dashed rounded trash box with a pill label under it (above if it would leave the screen)
+  function trashBox(c, x, y, bw, bh, col, txt, fs, strong, W, H) {
+    c.save();
+    rr(c, x, y, bw, bh, Math.min(14, bw / 4, bh / 4));
+    c.fillStyle = col === COL.trash ? "rgba(255,77,66,.10)" : "rgba(255,176,32,.08)"; c.fill();
+    c.lineWidth = strong ? 3.5 : 2.5; c.strokeStyle = col; c.setLineDash(strong ? [] : [8, 6]); c.stroke(); c.setLineDash([]);
+    const tw = c.measureText(txt).width + fs * 1.2, th = fs + 10;
+    let tx = Math.max(4, Math.min(W - tw - 4, x + bw / 2 - tw / 2)), ty = y + bh + 6;
+    if (ty + th > H - 4) ty = Math.max(4, y - th - 6);
+    rr(c, tx, ty, tw, th, th / 2); c.fillStyle = col; c.fill();
+    c.fillStyle = col === COL.trash ? "#fff" : "#2a1800"; c.fillText(txt, tx + fs * 0.6, ty + fs + 2);
+    c.restore();
+  }
+  function rr(c, x, y, w, h, r) {
+    r = Math.max(0, Math.min(r, w / 2, h / 2)); c.beginPath();
+    c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+  }
   function nearestItem() { return shown.filter(i => i.onFloor).sort((a, b) => a.dist - b.dist)[0] || null; }
   function updateCard() {
-    const n = nearestItem(), d = $("nearDist");
-    if (n) { $("nearWhat").textContent = n.name; d.textContent = fmtDist(n.dist); d.classList.remove("none"); }
-    else {
-      const off = shown.find(i => !i.onFloor);
-      $("nearWhat").textContent = off ? `${off.name} (not on floor)` : "No trash seen";
-      d.textContent = "–"; d.classList.add("none");
+    const n = nearestItem(), floor = shown.filter(i => i.onFloor), off = shown.find(i => !i.onFloor);
+    const why = [];
+    if (n) {
+      const cx = lastSize ? ((n.x1 + n.x2) / 2 / lastSize.w - 0.5) * 2 : 0;
+      setFace("happy", cx);
+      say([["A ", false], [n.name, true], [`, ${fmtDist(n.dist)} away`, false]]);
+      if (floor.length > 1) why.push(`${floor.length - 1} more on the floor.`);
+      if (off) why.push(`The ${off.name} is not on the floor, so I'll skip it.`);
+    } else if (off) {
+      setFace("look", lastSize ? ((off.x1 + off.x2) / 2 / lastSize.w - 0.5) * 2 : 0);
+      say([["I see a ", false], [off.name, true], [", but not on the floor", false]]);
+      why.push("Point me lower to find floor trash.");
+    } else {
+      setFace("flat", 0);
+      say([["No trash yet", false]]);
+      why.push("Point the phone at the floor.");
     }
+    $("why").textContent = why.join(" ");
   }
   function onSettingsChanged(k) {
     if (mode === "photo" && k !== "conf") rerunPhoto();
@@ -399,7 +478,7 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
     $("btnLive").textContent = "Live"; $("btnLive").classList.remove("primary");
     $("btnVideo").textContent = "Video";
   }
-  function showHud() { $("intro").hidden = true; $("hudTop").hidden = false; }
+  function showHud() { $("intro").hidden = true; $("status").hidden = false; $("buddy").hidden = false; }
 
   function startLoop(src) {
     const token = ++loopToken;
