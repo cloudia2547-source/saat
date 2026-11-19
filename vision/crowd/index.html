@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#061315">
+<title>s'aat Crowd Test</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 26'%3E%3Crect x='1' y='1' width='32' height='24' rx='6' fill='%23061315' stroke='%233cc463' stroke-width='2'/%3E%3Ccircle cx='17' cy='13' r='5' fill='none' stroke='%237dffa0' stroke-width='2.6'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: full-screen camera stage (landscape first). Instruction card top-left, status top-right, mini-map bottom-right, controls bottom-centre. Colours follow the s'aat site. */
+:root {
+  --bg: #061315;
+  --panel: rgba(6, 19, 21, .84);
+  --panel-solid: #0b2124;
+  --line: #1d3d40;
+  --fg: #e6f4ee;
+  --muted: #8fb0a6;
+  --accent: #3cc463;
+  --accent-hi: #7dffa0;
+  --trash: #ff4d42;
+  --off: #ffb020;
+  --wait: #ffc94a;
+  --back: #ff6b5e;
+  --person: #9fd8ff;
+  --f-ui: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-num: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg); font-family: var(--f-ui); -webkit-tap-highlight-color: transparent; }
+body { overflow: hidden; overscroll-behavior: none; }
+[hidden] { display: none !important; }
+
+.stage { position: fixed; inset: 0; background: #000; }
+.stage video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+#overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+.intro {
+  position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+  padding: max(20px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(96px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  background: radial-gradient(ellipse at 50% 40%, #0d2a2c 0%, var(--bg) 70%);
+}
+.intro-inner { display: flex; flex-direction: column; gap: 14px; align-items: center; max-width: 36rem; }
+.intro h1 { margin: 0; font-size: clamp(26px, 6vw, 40px); font-weight: 700; }
+.intro h1 span { color: var(--accent-hi); }
+.intro p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.5; text-wrap: balance; }
+.intro .tip { font-size: 13px; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.hud-top {
+  position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
+  padding: calc(env(safe-area-inset-top) + 10px) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
+  pointer-events: none;
+}
+.instr { padding: 10px 16px 12px; min-width: 0; max-width: min(58%, 420px); border-width: 2px; }
+.instr .act { font-weight: 800; font-size: clamp(26px, 4.6vw, 40px); line-height: 1.05; letter-spacing: .01em; display: flex; gap: 10px; align-items: center; }
+.instr .act .g { font-family: var(--f-num); font-weight: 700; }
+.instr .why { font-size: 14px; color: var(--fg); margin-top: 4px; }
+.instr .tgt { font-size: 13px; color: var(--muted); margin-top: 6px; font-family: var(--f-num); }
+.instr .tgt b { color: var(--trash); font-weight: 700; }
+.instr[data-a="GO"], .instr[data-a="LEFT"], .instr[data-a="RIGHT"] { border-color: var(--accent); }
+.instr[data-a="GO"] .act, .instr[data-a="LEFT"] .act, .instr[data-a="RIGHT"] .act { color: var(--accent-hi); }
+.instr[data-a="WAIT"] { border-color: var(--wait); } .instr[data-a="WAIT"] .act { color: var(--wait); }
+.instr[data-a="BACK"] { border-color: var(--back); } .instr[data-a="BACK"] .act { color: var(--back); }
+.instr[data-a="REACHED"] { border-color: var(--trash); } .instr[data-a="REACHED"] .act { color: var(--trash); }
+.status { max-width: 40%; padding: 7px 11px; font-family: var(--f-num); font-size: 12px; color: var(--muted); text-align: right; line-height: 1.5; }
+.status b { color: var(--accent-hi); font-weight: 500; }
+.status.err { color: var(--trash); }
+
+.mapbox {
+  position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: calc(env(safe-area-inset-bottom) + 70px);
+  width: min(34vh, 34vw, 240px); aspect-ratio: 1; padding: 0; overflow: hidden; pointer-events: none;
+}
+#map { width: 100%; height: 100%; display: block; }
+
+.hud-bottom {
+  position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap;
+  padding: 0 max(12px, env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 12px) max(12px, env(safe-area-inset-left));
+}
+button {
+  font-family: var(--f-ui); font-size: 15px; font-weight: 600; color: var(--fg);
+  background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
+  padding: 11px 18px; min-height: 46px; cursor: pointer; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: #032010; }
+button.on { border-color: var(--accent); color: var(--accent-hi); }
+button.big { font-size: 18px; padding: 15px 30px; min-height: 56px; }
+button.small { font-size: 13px; padding: 7px 12px; min-height: 36px; }
+button:disabled { opacity: .45; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
+@media (prefers-reduced-motion: no-preference) { button:active { transform: scale(.96); } }
+
+.turn { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 12px 16px; font-size: 14px; text-align: center; }
+
+.sheet {
+  position: fixed; top: 0; bottom: 0; right: 0; width: min(400px, 100%); overflow-y: auto; background: var(--panel-solid); border-left: 1px solid var(--line);
+  padding: calc(env(safe-area-inset-top) + 16px) max(18px, env(safe-area-inset-right)) calc(env(safe-area-inset-bottom) + 24px) 18px;
+  display: flex; flex-direction: column; gap: 16px; z-index: 5;
+}
+.sheet header { display: flex; justify-content: space-between; align-items: center; }
+.sheet h2 { margin: 0; font-size: 19px; }
+.sheet h3 { margin: 8px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 600; }
+.row { display: flex; flex-direction: column; gap: 6px; }
+.row label { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+.row output { font-family: var(--f-num); color: var(--accent-hi); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.row p, .sheet .note { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.switch { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 14px; }
+.switch input { width: 22px; height: 22px; accent-color: var(--accent); flex: none; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.snd { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; }
+.snd .name { font-size: 14px; font-weight: 600; }
+.snd .src { font-size: 12px; color: var(--muted); }
+.snd .btns { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.snd button.rec { border-color: var(--trash); color: var(--trash); }
+</style>
+</head>
+<body>
+
+<div class="stage" id="stage">
+  <video id="vid" playsinline muted hidden></video>
+  <canvas id="overlay"></canvas>
+
+  <div class="intro" id="intro">
+    <div class="intro-inner">
+      <h1>s'aat <span>Crowd Test</span></h1>
+      <p>Be the robot. Hold the phone sideways at s'aat's height and point it ahead. s'aat watches the people, predicts where they will walk, and tells you which way to go to reach the trash.</p>
+      <button class="primary big" id="btnStart" disabled>Loading model…</button>
+      <p class="tip">Start standing still. Allow camera and motion when asked. Turn the sound on.</p>
+    </div>
+  </div>
+
+  <div class="hud-top" id="hudTop" hidden>
+    <div class="card instr" id="instr" data-a="GO" aria-live="polite">
+      <div class="act"><span class="g" id="actGlyph">↑</span><span id="actWord">Starting</span></div>
+      <div class="why" id="actWhy">Looking around…</div>
+      <div class="tgt" id="actTgt">No trash yet</div>
+    </div>
+    <div class="card status" id="status" role="status">Starting…</div>
+  </div>
+
+  <div class="card mapbox" id="mapbox" hidden><canvas id="map"></canvas></div>
+
+  <div class="card turn" id="turnHint" hidden>Turn the phone sideways<br><span style="color:var(--muted);font-size:12px">Rotation lock must be off</span></div>
+
+  <div class="hud-bottom">
+    <button id="btnLive">Live</button>
+    <button id="btnWalk">Standing</button>
+    <button id="btnVideo">Video</button>
+    <button id="btnSettings">Settings</button>
+  </div>
+</div>
+
+<input type="file" id="videoIn" accept="video/*" hidden>
+<input type="file" id="soundIn" accept="audio/*" hidden>
+
+<aside class="sheet" id="sheet" hidden aria-label="Settings">
+  <header><h2>Settings</h2><button id="btnClose">Done</button></header>
+
+  <h3>Robot</h3>
+  <div class="row">
+    <label for="sWidth">Robot width <output id="oWidth"></output></label>
+    <input type="range" id="sWidth" min="20" max="100" step="1">
+  </div>
+  <div class="row">
+    <label for="sSpeed">Robot speed <output id="oSpeed"></output></label>
+    <input type="range" id="sSpeed" min="0.1" max="1.2" step="0.05">
+    <p>In Walking mode, walk at about this speed when it says GO.</p>
+  </div>
+  <div class="row">
+    <label for="sSpace">Personal space <output id="oSpace"></output></label>
+    <input type="range" id="sSpace" min="0.2" max="1.5" step="0.05">
+    <p>Gap s'aat keeps between its edge and a person.</p>
+  </div>
+
+  <h3>Camera</h3>
+  <div class="row">
+    <label for="sHeight">Phone height above floor <output id="oHeight"></output></label>
+    <input type="range" id="sHeight" min="5" max="180" step="1">
+    <p>About 120 cm when you hold the phone standing. Measure it, because every distance depends on it.</p>
+  </div>
+  <div class="switch">
+    <label for="sAuto">Measure tilt and turning with the motion sensor</label>
+    <input type="checkbox" id="sAuto">
+  </div>
+  <div class="row">
+    <label for="sTilt">Tilt down (manual and video) <output id="oTilt"></output></label>
+    <input type="range" id="sTilt" min="0" max="85" step="1">
+  </div>
+  <div class="row">
+    <label for="sConf">Minimum confidence <output id="oConf"></output></label>
+    <input type="range" id="sConf" min="10" max="80" step="1">
+  </div>
+  <div class="row">
+    <label for="sFov">Camera field of view <output id="oFov"></output></label>
+    <input type="range" id="sFov" min="40" max="110" step="1">
+  </div>
+
+  <h3>Sounds</h3>
+  <div class="switch">
+    <label for="sSound">Sounds on</label>
+    <input type="checkbox" id="sSound">
+  </div>
+  <div id="sndList"></div>
+  <p class="note">Record when you are not scanning. Recordings stay on this phone only. Without a recording, s'aat uses a built-in chirp or voice.</p>
+</aside>
+
+<script src="crowd-core.js"></script>
+<script>
+(() => {
+  // ---------------- config ----------------
+  const TRASH = ["plastic bottle","plastic cup","paper cup","can","snack wrapper","plastic bag","food scraps","cigarette butt","crumpled paper","straw","tissue","milk carton","takeaway food box","bottle cap","plastic spoon","plastic fork","ice cream stick","receipt","candy wrapper","foam box","banana peel","apple core"];
+  const KEEP  = ["shoe","cable","mobile phone","chair leg","person","bag","book","remote control","pet","trash bin","bollard","table","chair","banana","apple"];
+  const CLASSES = TRASH.concat(KEEP);       // must match the order baked into ../model.onnx
+  const PERSON = CLASSES.indexOf("person");
+  const S = 416, C = window.SaatCrowd;
+  const COL = { trash: "#ff4d42", person: "#9fd8ff", route: "#7dffa0", wait: "#ffc94a", back: "#ff6b5e" };
+  const $ = id => document.getElementById(id);
+  const vid = $("vid"), overlay = $("overlay"), octx = overlay.getContext("2d"), map = $("map"), mctx = map.getContext("2d");
+  const statusEl = $("status");
+  const deg = d => d * Math.PI / 180;
+
+  // ---------------- settings ----------------
+  const DEF = { width: 40, speed: 0.4, space: 0.6, height: 120, auto: true, tilt: 30, conf: 25, fov: 64, sound: true, walking: false };
+  let set = { ...DEF };
+  try { Object.assign(set, JSON.parse(localStorage.getItem("saat-crowd") || "{}")); } catch (e) {}
+  const save = () => { try { localStorage.setItem("saat-crowd", JSON.stringify(set)); } catch (e) {} };
+  const sliders = {
+    width: ["Width", v => v + " cm"], speed: ["Speed", v => v.toFixed(2) + " m/s"], space: ["Space", v => v.toFixed(2) + " m"],
+    height: ["Height", v => v + " cm"], tilt: ["Tilt", v => v + "°"], conf: ["Conf", v => v + "%"], fov: ["Fov", v => v + "°"]
+  };
+  for (const [k, [n, f]] of Object.entries(sliders)) {
+    const s = $("s" + n), o = $("o" + n);
+    s.value = set[k]; o.textContent = f(set[k]);
+    s.addEventListener("input", () => { set[k] = +s.value; o.textContent = f(set[k]); save(); });
+  }
+  $("sAuto").checked = set.auto;
+  $("sAuto").addEventListener("change", e => { set.auto = e.target.checked; save(); if (set.auto) enableMotion(); });
+  $("sSound").checked = set.sound;
+  $("sSound").addEventListener("change", e => { set.sound = e.target.checked; save(); });
+  $("btnSettings").onclick = () => { $("sheet").hidden = false; };
+  $("btnClose").onclick = () => { $("sheet").hidden = true; };
+  const crowdParams = () => ({ robotWidth: set.width / 100, speed: set.speed, personalSpace: set.space, fov: deg(set.fov) });
+
+  function paintWalk() {
+    $("btnWalk").textContent = set.walking ? "Walking" : "Standing";
+    $("btnWalk").classList.toggle("on", set.walking);
+  }
+  $("btnWalk").onclick = () => { set.walking = !set.walking; save(); paintWalk(); resetWorld(); };
+  paintWalk();
+
+  // ---------------- status ----------------
+  let statusMain = "", statusErr = false;
+  function setStatus(t, err) { statusMain = t; statusErr = !!err; renderStatus(); }
+  function renderStatus() {
+    statusEl.classList.toggle("err", statusErr);
+    statusEl.textContent = "";
+    const a = document.createElement("div"); a.textContent = statusMain;
+    const b = document.createElement("div");
+    b.innerHTML = sensorLive() ? `tilt <b>${Math.round(sensorTilt)}°</b> · turn <b>on</b>` : `tilt ${set.tilt}° (manual)`;
+    const c = document.createElement("div"); c.textContent = `${people.filter(p => p.hits >= 2).length} people tracked · ${set.walking ? "walking" : "standing"}`;
+    statusEl.append(a, b, c);
+  }
+
+  // ---------------- motion sensor: tilt + heading ----------------
+  // Camera looks along the device's -z axis. With R = Rz(alpha) Rx(beta) Ry(gamma):
+  //   tilt below horizontal = asin(cos(beta) cos(gamma));  heading from the horizontal part of -R[:,2].
+  let sensorTilt = null, sensorHead = null, lastSensor = 0, motionOn = false;
+  function onOrient(e) {
+    if (e.beta == null || e.gamma == null) return;
+    const a = deg(e.alpha || 0), b = deg(e.beta), g = deg(e.gamma);
+    const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b), cg = Math.cos(g), sg = Math.sin(g);
+    const t = Math.asin(Math.max(-1, Math.min(1, cb * cg))) * 180 / Math.PI;
+    sensorTilt = sensorTilt == null ? t : sensorTilt * 0.8 + t * 0.2;
+    const cx = -(ca * sg + sa * sb * cg), cy = -(sa * sg - ca * sb * cg);
+    if (Math.hypot(cx, cy) > 0.15 && e.alpha != null) {
+      const h = Math.atan2(cy, cx);
+      sensorHead = sensorHead == null ? h : sensorHead + C.wrap(h - sensorHead) * 0.35;
+    }
+    lastSensor = performance.now();
+  }
+  async function enableMotion() {
+    if (motionOn) return;
+    try {
+      if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+        const r = await DeviceOrientationEvent.requestPermission();
+        if (r !== "granted") return;
+      }
+      window.addEventListener("deviceorientation", onOrient);
+      motionOn = true;
+    } catch (e) {}
+  }
+  const sensorLive = () => set.auto && mode === "live" && sensorTilt != null && performance.now() - lastSensor < 1500;
+  const currentTilt = () => sensorLive() ? sensorTilt : set.tilt;
+
+  // ---------------- sounds ----------------
+  const SOUNDS = [
+    { key: "spotted", name: "Spotted trash" },
+    { key: "excuse", name: "Excuse me" },
+    { key: "reached", name: "Reached trash" },
+  ];
+  let actx = null;
+  const buffers = {};          // key -> AudioBuffer of the user's recording
+  function unlockAudio() {
+    try {
+      if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === "suspended") actx.resume();
+      const b = actx.createBuffer(1, 1, 22050), s = actx.createBufferSource(); s.buffer = b; s.connect(actx.destination); s.start(0);
+    } catch (e) {}
+    try { if (window.speechSynthesis) { const u = new SpeechSynthesisUtterance(" "); u.volume = 0; speechSynthesis.speak(u); } } catch (e) {}
+  }
+  function tone(notes) {         // notes: [[freq, start, dur], ...]
+    if (!actx) return;
+    const t0 = actx.currentTime + 0.02;
+    for (const [f, st, du] of notes) {
+      const o = actx.createOscillator(), g = actx.createGain();
+      o.type = "sine"; o.frequency.setValueAtTime(f, t0 + st);
+      g.gain.setValueAtTime(0, t0 + st); g.gain.linearRampToValueAtTime(0.28, t0 + st + 0.015); g.gain.exponentialRampToValueAtTime(0.001, t0 + st + du);
+      o.connect(g); g.connect(actx.destination); o.start(t0 + st); o.stop(t0 + st + du + 0.05);
+    }
+  }
+  function playSound(key) {
+    if (!set.sound) return;
+    if (buffers[key] && actx) {
+      try { const s = actx.createBufferSource(); s.buffer = buffers[key]; s.connect(actx.destination); s.start(); return; } catch (e) {}
+    }
+    if (key === "spotted") tone([[880, 0, .12], [1320, .13, .16]]);
+    else if (key === "reached") tone([[784, 0, .12], [988, .11, .12], [1175, .22, .12], [1568, .33, .28]]);
+    else if (key === "excuse") {
+      tone([[1046, 0, .09], [880, .1, .09]]);
+      try {
+        if (window.speechSynthesis) {
+          const u = new SpeechSynthesisUtterance("Excuse me"); u.lang = "en-US"; u.rate = 1.05; u.pitch = 1.6;
+          setTimeout(() => speechSynthesis.speak(u), 250);
+        }
+      } catch (e) {}
+    }
+  }
+
+  // recordings are kept in IndexedDB on this device
+  const DB = { db: null };
+  function openDB() {
+    return new Promise(res => {
+      try {
+        const r = indexedDB.open("saat-sounds", 1);
+        r.onupgradeneeded = () => r.result.createObjectStore("s");
+        r.onsuccess = () => { DB.db = r.result; res(true); };
+        r.onerror = () => res(false);
+      } catch (e) { res(false); }
+    });
+  }
+  const dbOp = (fn, mode) => new Promise(res => {
+    try { const tx = DB.db.transaction("s", mode || "readonly"), st = tx.objectStore("s"), q = fn(st); tx.oncomplete = () => res(q && q.result); tx.onerror = () => res(null); }
+    catch (e) { res(null); }
+  });
+  async function decodeTo(key, blob) {
+    try {
+      if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+      const ab = await blob.arrayBuffer();
+      buffers[key] = await new Promise((ok, bad) => actx.decodeAudioData(ab, ok, bad));
+      return true;
+    } catch (e) { delete buffers[key]; return false; }
+  }
+  async function loadSounds() {
+    if (!(await openDB())) return;
+    for (const s of SOUNDS) { const b = await dbOp(st => st.get(s.key)); if (b) await decodeTo(s.key, b); }
+    renderSounds();
+  }
+  async function storeSound(key, blob) {
+    const ok = await decodeTo(key, blob);
+    if (!ok) { alertSound(key, "That sound could not be played. Try recording again."); return; }
+    if (DB.db) await dbOp(st => st.put(blob, key), "readwrite");
+    renderSounds();
+  }
+  async function clearSound(key) { delete buffers[key]; if (DB.db) await dbOp(st => st.delete(key), "readwrite"); renderSounds(); }
+  const sndMsg = {};
+  function alertSound(key, msg) { sndMsg[key] = msg; renderSounds(); }
+
+  let rec = null;   // { key, mr, stream, timer }
+  async function startRecording(key) {
+    if (rec) return stopRecording();
+    unlockAudio();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream), chunks = [];
+      mr.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+      mr.onstop = () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(chunks, { type: mr.mimeType || "audio/mp4" });
+        rec = null; storeSound(key, blob);
+      };
+      rec = { key, mr, stream, timer: setTimeout(stopRecording, 4000) };
+      mr.start(); sndMsg[key] = ""; renderSounds();
+    } catch (e) {
+      rec = null; alertSound(key, "Microphone is blocked. Allow it in Settings, or use a sound file.");
+    }
+  }
+  function stopRecording() { if (!rec) return; clearTimeout(rec.timer); try { rec.mr.stop(); } catch (e) {} }
+  let pickKey = null;
+  $("soundIn").onchange = e => { const f = e.target.files[0]; e.target.value = ""; if (f && pickKey) storeSound(pickKey, f); };
+
+  function renderSounds() {
+    const box = $("sndList"); box.textContent = "";
+    const canRec = typeof MediaRecorder !== "undefined" && navigator.mediaDevices && navigator.mediaDevices.getUserMedia;
+    for (const s of SOUNDS) {
+      const row = document.createElement("div"); row.className = "snd";
+      const left = document.createElement("div");
+      const n = document.createElement("div"); n.className = "name"; n.textContent = s.name;
+      const src = document.createElement("div"); src.className = "src";
+      src.textContent = sndMsg[s.key] || (rec && rec.key === s.key ? "Recording… tap Stop (max 4 s)" : buffers[s.key] ? "Your sound" : "Built-in sound");
+      left.append(n, src);
+      const btns = document.createElement("div"); btns.className = "btns";
+      const mk = (label, fn, cls) => { const b = document.createElement("button"); b.className = "small" + (cls ? " " + cls : ""); b.textContent = label; b.onclick = fn; btns.append(b); return b; };
+      mk("Play", () => { unlockAudio(); const was = set.sound; set.sound = true; playSound(s.key); set.sound = was; });
+      if (canRec) mk(rec && rec.key === s.key ? "Stop" : "Record", () => startRecording(s.key), "rec");
+      mk("File", () => { pickKey = s.key; $("soundIn").click(); });
+      if (buffers[s.key]) mk("Reset", () => clearSound(s.key));
+      row.append(left, btns); box.append(row);
+    }
+  }
+  renderSounds(); loadSounds();
+
+  // ---------------- model worker (shared with the trash scanner) ----------------
+  const worker = new Worker("../worker.js");
+  let ready = false, busy = false, runId = 0;
+  worker.onmessage = e => {
+    const m = e.data;
+    if (m.type === "ready") { ready = true; const b = $("btnStart"); b.disabled = false; b.textContent = "Start crowd test"; setStatus("Ready"); }
+    else if (m.type === "error") { $("btnStart").textContent = "Model failed to load"; $("hudTop").hidden = false; setStatus("Model failed to load: " + m.message, true); }
+    else if (m.type === "result") onResult(m);
+  };
+  worker.postMessage({ type: "init", model: new URL("../model.onnx", location.href).href });
+
+  const pc = document.createElement("canvas"); pc.width = pc.height = S;
+  const pctx = pc.getContext("2d", { willReadFrequently: true });
+  function preprocess(src, w, h) {
+    const r = Math.min(S / w, S / h), nw = Math.round(w * r), nh = Math.round(h * r);
+    const px = Math.floor((S - nw) / 2), py = Math.floor((S - nh) / 2);
+    pctx.fillStyle = "rgb(114,114,114)"; pctx.fillRect(0, 0, S, S);
+    pctx.drawImage(src, 0, 0, w, h, px, py, nw, nh);
+    const d = pctx.getImageData(0, 0, S, S).data, A = S * S, f = new Float32Array(3 * A);
+    for (let i = 0, j = 0; i < A; i++, j += 4) { f[i] = d[j] / 255; f[i + A] = d[j + 1] / 255; f[i + 2 * A] = d[j + 2] / 255; }
+    return { f, r, px, py };
+  }
+
+  // ---------------- floor geometry ----------------
+  // pixel where something touches the floor -> { fwd, right } in metres from the camera (null if the ray misses the floor)
+  function floorPoint(u, v, w, h, tiltDeg) {
+    const f = (Math.max(w, h) / 2) / Math.tan(deg(set.fov / 2));
+    const x = u - w / 2, y = v - h / 2, th = deg(tiltDeg);
+    const down = f * Math.sin(th) + y * Math.cos(th);
+    if (down <= 1e-6) return null;
+    const t = (set.height / 100) / down;
+    const fwd = t * (f * Math.cos(th) - y * Math.sin(th));
+    if (fwd <= 0) return null;
+    return { fwd, right: t * x };
+  }
+  // a person: use their feet; if the feet are cut off, judge distance from how tall they look (about 1.65 m)
+  function personPoint(b, w, h, tiltDeg) {
+    const feetVisible = b.y2 < h - 4;
+    const fp = feetVisible ? floorPoint((b.x1 + b.x2) / 2, b.y2, w, h, tiltDeg) : null;
+    if (fp && fp.fwd < 12) return { ...fp, how: "feet" };
+    const f = (Math.max(w, h) / 2) / Math.tan(deg(set.fov / 2));
+    const hp = Math.max(8, b.y2 - b.y1);
+    const dist = Math.min(12, f * 1.65 / hp * (feetVisible ? 1 : 0.85));
+    const ang = Math.atan(((b.x1 + b.x2) / 2 - w / 2) / f);
+    return { fwd: dist * Math.cos(ang), right: dist * Math.sin(ang), how: "height" };
+  }
+
+  // ---------------- world state ----------------
+  // robot pose in a world frame: x/y metres, th radians (left = +). Heading comes from the compass when available.
+  let robot = { x: 0, y: 0, th: 0 }, headZero = null, lastT = null;
+  let people = [], nextId = { v: 1 };
+  let goal = null;          // { x, y, name, seen }
+  let collected = [];       // { x, y, until }
+  let decision = null, shownTrash = [], shownPeople = [], lastSize = null;
+  let blockedSince = 0, lastExcuse = 0, lastSpotted = 0, lastReached = 0;
+  function resetWorld() { robot = { x: 0, y: 0, th: 0 }; headZero = null; people = []; goal = null; collected = []; decision = null; lastT = null; }
+
+  const toWorld = p => ({
+    x: robot.x + p.fwd * Math.cos(robot.th) + p.right * Math.sin(robot.th),
+    y: robot.y + p.fwd * Math.sin(robot.th) - p.right * Math.cos(robot.th)
+  });
+
+  function updatePose(t) {
+    const dt = lastT == null ? 0 : Math.min(1, t - lastT); lastT = t;
+    if (sensorLive() && sensorHead != null) {
+      if (headZero == null) headZero = sensorHead;
+      robot.th = C.wrap(sensorHead - headZero);
+    }
+    if (set.walking && decision && dt > 0) {      // assume you walk at robot speed when told to move
+      const a = decision.action, v = a === "GO" || a === "LEFT" || a === "RIGHT" ? set.speed : a === "BACK" ? -set.speed * 0.6 : 0;
+      robot.x += v * dt * Math.cos(robot.th); robot.y += v * dt * Math.sin(robot.th);
+    }
+  }
+
+  // ---------------- per-frame pipeline ----------------
+  let pending = null, frames = 0, fpsT0 = performance.now(), fps = 0, lastMs = 0;
+  function onResult(m) {
+    busy = false;
+    if (!pending || m.id !== pending.id) return;
+    const { w, h, r, px, py } = pending; pending = null;
+    if (m.error) { setStatus("AI error: " + m.error, true); return; }
+    lastMs = m.ms; frames++;
+    const now = performance.now(), t = now / 1000;
+    if (now - fpsT0 > 1000) { fps = frames * 1000 / (now - fpsT0); frames = 0; fpsT0 = now; }
+    updatePose(t);
+    const tilt = currentTilt();
+
+    const trash = [], seenPeople = [];
+    for (const d of m.dets) {
+      const b = { x1: Math.max(0, (d.x1 - px) / r), y1: Math.max(0, (d.y1 - py) / r), x2: Math.min(w, (d.x2 - px) / r), y2: Math.min(h, (d.y2 - py) / r) };
+      if (d.cls === PERSON) {
+        const pp = personPoint(b, w, h, tilt);
+        if (pp && pp.fwd > 0.2 && pp.fwd < 12) seenPeople.push({ ...toWorld(pp), box: b });
+      } else if (d.cls < TRASH.length) {
+        const fp = floorPoint((b.x1 + b.x2) / 2, b.y2, w, h, tilt);
+        const onFloor = fp && Math.hypot(fp.fwd, fp.right) < 6;
+        const wp = onFloor ? toWorld(fp) : null;
+        if (wp && collected.some(c => c.until > t && Math.hypot(c.x - wp.x, c.y - wp.y) < 0.6)) continue;
+        trash.push({ ...b, name: CLASSES[d.cls], onFloor: !!onFloor, dist: onFloor ? Math.hypot(fp.fwd, fp.right) : null, wp });
+      }
+    }
+    people = C.updateTracks(people, seenPeople.map(p => ({ x: p.x, y: p.y })), t, nextId);
+    collected = collected.filter(c => c.until > t);
+    updateGoal(trash, t);
+
+    // plan
+    const live = people.filter(p => p.hits >= 2).map(p => ({ ...p, ...C.trackNow(p, t) }));
+    const params = crowdParams();
+    let reached = false;
+    if (goal && Math.hypot(goal.x - robot.x, goal.y - robot.y) < 0.35 + set.width / 200) reached = true;
+    if (reached) {
+      decision = { action: "REACHED", reason: `Scoop the ${goal.name}`, preds: C.predict(live, robot, params), obs: [], path: null };
+      if (t - lastReached > 4) { playSound("reached"); lastReached = t; }
+      collected.push({ x: goal.x, y: goal.y, until: t + 20 }); goal = null;
+    } else {
+      decision = C.plan(robot, goal, live, params, decision);
+    }
+    // "excuse me" after being held up by people for 2 s
+    const held = decision.action === "BACK" || decision.action === "WAIT";
+    if (held && decision.ids && decision.ids.length) { if (!blockedSince) blockedSince = t; } else blockedSince = 0;
+    if (blockedSince && t - blockedSince > 2 && t - lastExcuse > 8) { playSound("excuse"); lastExcuse = t; }
+
+    shownTrash = trash; shownPeople = seenPeople; lastSize = { w, h };
+    drawOverlay(); drawMap(); paintInstruction();
+    setStatus(`${fps.toFixed(1)} checks/s · ${Math.round(lastMs)} ms`);
+  }
+
+  function updateGoal(trash, t) {
+    const cands = trash.filter(x => x.onFloor && x.wp).map(x => ({ ...x.wp, name: x.name, d: Math.hypot(x.wp.x - robot.x, x.wp.y - robot.y) })).sort((a, b) => a.d - b.d);
+    if (goal) {
+      const same = cands.find(c => Math.hypot(c.x - goal.x, c.y - goal.y) < 0.7);
+      if (same) { goal.x = goal.x * 0.6 + same.x * 0.4; goal.y = goal.y * 0.6 + same.y * 0.4; goal.seen = t; goal.name = same.name; }
+      if (cands[0] && cands[0] !== same && cands[0].d + 0.5 < Math.hypot(goal.x - robot.x, goal.y - robot.y)) goal = { ...cands[0], seen: t };
+      else if (t - goal.seen > 4) goal = null;          // lost it
+    } else if (cands[0]) {
+      goal = { x: cands[0].x, y: cands[0].y, name: cands[0].name, seen: t };
+      if (t - lastSpotted > 5) { playSound("spotted"); lastSpotted = t; }
+    }
+  }
+
+  // ---------------- drawing ----------------
+  const fmtDist = m => m < 1 ? `${Math.round(m * 100)} cm` : `${m.toFixed(1)} m`;
+  function drawOverlay() {
+    const dpr = window.devicePixelRatio || 1, W = overlay.clientWidth, H = overlay.clientHeight;
+    if (overlay.width !== Math.round(W * dpr) || overlay.height !== Math.round(H * dpr)) { overlay.width = Math.round(W * dpr); overlay.height = Math.round(H * dpr); }
+    octx.setTransform(dpr, 0, 0, dpr, 0, 0); octx.clearRect(0, 0, W, H);
+    if (!lastSize || !mode) return;
+    const s = Math.min(W / lastSize.w, H / lastSize.h), ox = (W - lastSize.w * s) / 2, oy = (H - lastSize.h * s) / 2;
+    // people: soft outline only
+    octx.lineWidth = 1.5; octx.strokeStyle = "rgba(159,216,255,.55)";
+    for (const p of shownPeople) {
+      const b = p.box, x = ox + b.x1 * s, y = oy + b.y1 * s, bw = (b.x2 - b.x1) * s, bh = (b.y2 - b.y1) * s;
+      roundRect(octx, x, y, bw, bh, 10); octx.stroke();
+    }
+    // trash boxes
+    const fs = Math.max(13, Math.min(18, Math.round(W / 45)));
+    octx.font = `600 ${fs}px Archivo, "Helvetica Neue", Arial, sans-serif`;
+    for (const it of shownTrash) {
+      const x = ox + it.x1 * s, y = oy + it.y1 * s, bw = (it.x2 - it.x1) * s, bh = (it.y2 - it.y1) * s;
+      const col = it.onFloor ? COL.trash : "#ffb020";
+      octx.lineWidth = 2.5; octx.strokeStyle = col; octx.strokeRect(x, y, bw, bh);
+      const txt = it.onFloor ? `${it.name} · ${fmtDist(it.dist)}` : `${it.name} · not on floor`;
+      const tw = octx.measureText(txt).width + 12, th = fs + 9, ty = y - th >= 0 ? y - th : y + bh;
+      octx.fillStyle = col; octx.fillRect(x, ty, tw, th); octx.fillStyle = "#14070a"; octx.fillText(txt, x + 6, ty + fs + 1);
+    }
+  }
+  function roundRect(c, x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2); c.beginPath();
+    c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+  }
+
+  // top-down map, robot-centred, forward = up
+  function drawMap() {
+    const dpr = window.devicePixelRatio || 1, W = map.clientWidth, H = map.clientHeight;
+    if (!W) return;
+    if (map.width !== Math.round(W * dpr)) { map.width = Math.round(W * dpr); map.height = Math.round(H * dpr); }
+    const c = mctx; c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
+    const cx = W / 2, cy = H * 0.8, k = H / 6.2;               // pixels per metre (about 5 m ahead visible)
+    const P = (wx, wy) => {
+      const dx = wx - robot.x, dy = wy - robot.y, ct = Math.cos(robot.th), st = Math.sin(robot.th);
+      const f = dx * ct + dy * st, left = -dx * st + dy * ct;
+      return [cx - left * k, cy - f * k];
+    };
+    // field of view + range rings
+    const half = deg(set.fov / 2);
+    c.fillStyle = "rgba(125,255,160,.06)"; c.beginPath(); c.moveTo(cx, cy);
+    c.arc(cx, cy, 6 * k, -Math.PI / 2 - half, -Math.PI / 2 + half); c.closePath(); c.fill();
+    c.strokeStyle = "rgba(143,176,166,.25)"; c.lineWidth = 1;
+    c.font = "10px JetBrains Mono, monospace"; c.fillStyle = "rgba(143,176,166,.7)";
+    for (let m = 1; m <= 5; m++) { c.beginPath(); c.arc(cx, cy, m * k, Math.PI, 2 * Math.PI); c.stroke(); c.fillText(m + "m", cx + 3, cy - m * k + 11); }
+    if (!decision) return;
+    // standing groups
+    for (const g of decision.obs || []) { const [x, y] = P(g.x, g.y); c.fillStyle = "rgba(159,216,255,.12)"; c.beginPath(); c.arc(x, y, g.r * k + 4, 0, 2 * Math.PI); c.fill(); }
+    // people: predicted path (2 s) + dot
+    const hot = new Set(decision.ids || []);
+    for (const pr of decision.preds || []) {
+      const pts = pr.pts.slice(0, 11).map(q => P(q.x, q.y));
+      if (!pr.still && pts.length > 1) {
+        c.strokeStyle = hot.has(pr.id) ? "rgba(255,201,74,.9)" : "rgba(159,216,255,.7)"; c.lineWidth = 2; c.setLineDash([4, 3]);
+        c.beginPath(); c.moveTo(pts[0][0], pts[0][1]); for (const q of pts) c.lineTo(q[0], q[1]); c.stroke(); c.setLineDash([]);
+        const [ax, ay] = pts[pts.length - 1], [bx, by] = pts[pts.length - 2], an = Math.atan2(ay - by, ax - bx);
+        c.beginPath(); c.moveTo(ax, ay); c.lineTo(ax - 7 * Math.cos(an - .5), ay - 7 * Math.sin(an - .5)); c.lineTo(ax - 7 * Math.cos(an + .5), ay - 7 * Math.sin(an + .5)); c.closePath();
+        c.fillStyle = c.strokeStyle; c.fill();
+      }
+      const [x, y] = pts[0];
+      c.fillStyle = hot.has(pr.id) ? COL.wait : COL.person; c.beginPath(); c.arc(x, y, Math.max(4, 0.25 * k), 0, 2 * Math.PI); c.fill();
+    }
+    // chosen route
+    if (decision.path && decision.path.wps && decision.action !== "BACK") {
+      c.strokeStyle = decision.action === "WAIT" ? COL.wait : COL.route; c.lineWidth = 3;
+      c.beginPath(); c.moveTo(cx, cy); for (const w of decision.path.wps) { const [x, y] = P(w.x, w.y); c.lineTo(x, y); } c.stroke();
+    }
+    // trash goal
+    if (goal) { const [x, y] = P(goal.x, goal.y); c.fillStyle = COL.trash; c.beginPath(); c.arc(x, y, 6, 0, 2 * Math.PI); c.fill(); c.strokeStyle = "#fff"; c.lineWidth = 1.5; c.stroke(); }
+    // s'aat
+    const rw = Math.max(10, set.width / 100 * k);
+    c.fillStyle = "#3cc463"; roundRect(c, cx - rw / 2, cy - rw * 0.4, rw, rw * 0.8, 4); c.fill();
+    c.fillStyle = "#032010"; c.beginPath(); c.moveTo(cx, cy - rw * 0.4 - 6); c.lineTo(cx - 5, cy - rw * 0.4); c.lineTo(cx + 5, cy - rw * 0.4); c.closePath(); c.fill();
+  }
+
+  const ACT = {
+    GO: ["↑", "GO"], LEFT: ["↖", "TURN LEFT"], RIGHT: ["↗", "TURN RIGHT"], WAIT: ["✋", "WAIT"], BACK: ["↓", "BACK OFF"], REACHED: ["✓", "PICK IT UP"]
+  };
+  function paintInstruction() {
+    if (!decision) return;
+    const a = ACT[decision.action] || ["·", decision.action];
+    $("instr").dataset.a = decision.action;
+    $("actGlyph").textContent = a[0];
+    let word = a[1];
+    if ((decision.action === "LEFT" || decision.action === "RIGHT") && decision.rel != null) word += ` ${Math.round(Math.abs(decision.rel) * 180 / Math.PI)}°`;
+    $("actWord").textContent = word;
+    $("actWhy").textContent = decision.reason || "";
+    const tg = $("actTgt"); tg.textContent = "";
+    if (goal) {
+      const d = Math.hypot(goal.x - robot.x, goal.y - robot.y);
+      tg.append("Target: " + goal.name + " · "); const b = document.createElement("b"); b.textContent = fmtDist(d); tg.append(b);
+    } else tg.textContent = "No trash yet · patrolling ahead";
+  }
+
+  // ---------------- modes ----------------
+  let mode = null, stream = null, loopToken = 0, wakeLock = null, objectUrl = null;
+  function stopAll() {
+    loopToken++;
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    vid.pause(); vid.removeAttribute("src"); vid.srcObject = null; vid.load(); vid.hidden = true;
+    if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = null; }
+    if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+    pending = null; mode = null; shownTrash = []; shownPeople = []; drawOverlay();
+    $("btnLive").textContent = "Live"; $("btnLive").classList.remove("primary"); $("btnVideo").textContent = "Video";
+  }
+  function showHud() { $("intro").hidden = true; $("hudTop").hidden = false; $("mapbox").hidden = false; }
+  function startLoop(src) {
+    const token = ++loopToken;
+    const tick = () => {
+      if (token !== loopToken) return;
+      const w = src.videoWidth, h = src.videoHeight;
+      if (ready && !busy && w && h && !src.paused && src.readyState >= 2) {
+        busy = true;
+        const p = preprocess(src, w, h);
+        pending = { id: ++runId, w, h, r: p.r, px: p.px, py: p.py };
+        worker.postMessage({ type: "run", id: runId, input: p.f, conf: set.conf / 100, nClasses: CLASSES.length }, [p.f.buffer]);
+      }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+  async function startLive() {
+    unlockAudio();
+    stopAll(); resetWorld();
+    if (set.auto) await enableMotion();
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("This browser cannot open the camera.");
+      stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } });
+    } catch (e) {
+      showHud();
+      setStatus(e && e.name === "NotAllowedError" ? "Camera is blocked. Allow it in the browser settings, then reload." : "Could not open the camera: " + (e && e.message || e), true);
+      return;
+    }
+    mode = "live"; showHud();
+    vid.srcObject = stream; vid.hidden = false;
+    try { await vid.play(); } catch (e) {}
+    try { wakeLock = await navigator.wakeLock?.request("screen"); } catch (e) {}
+    $("btnLive").textContent = "Stop"; $("btnLive").classList.add("primary");
+    setStatus("Scanning…"); checkTurn(); startLoop(vid);
+  }
+  $("btnStart").onclick = startLive;
+  $("btnLive").onclick = () => mode === "live" ? (stopAll(), setStatus("Stopped")) : startLive();
+
+  $("btnVideo").onclick = () => {
+    if (mode === "video") { if (vid.paused) vid.play().catch(() => {}); else vid.pause(); $("btnVideo").textContent = vid.paused ? "Play" : "Pause"; return; }
+    $("videoIn").click();
+  };
+  $("videoIn").onchange = async e => {
+    const file = e.target.files[0]; e.target.value = ""; if (!file) return;
+    unlockAudio(); stopAll(); resetWorld(); mode = "video"; showHud();
+    objectUrl = URL.createObjectURL(file);
+    vid.src = objectUrl; vid.loop = true; vid.hidden = false;
+    try { await vid.play(); } catch (err) {}
+    $("btnVideo").textContent = "Pause"; setStatus("Playing video"); startLoop(vid);
+  };
+
+  function checkTurn() { $("turnHint").hidden = !(mode === "live" && window.innerHeight > window.innerWidth); }
+  window.addEventListener("resize", () => { drawOverlay(); drawMap(); checkTurn(); });
+  setStatus("Loading model…");
+})();
+</script>
+</body>
+</html>
